@@ -1,0 +1,91 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="common">
+      <UniqueIdentifier>{53c17f9e-67b8-4522-bd88-e7393c53c3dc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="main">
+      <UniqueIdentifier>{40cd2904-e723-49be-8223-e8fdcabb4608}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="config">
+      <UniqueIdentifier>{05b078f4-cb7b-4746-8918-bb65959f533d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="network">
+      <UniqueIdentifier>{9e8106d3-64f1-4177-9593-52f7b78899b0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="network\modules">
+      <UniqueIdentifier>{36d15325-4960-440e-9077-7f52e4366faf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="project">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="common\thread_pool.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="common\type.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="config\config_manager.h">
+      <Filter>config</Filter>
+    </ClInclude>
+    <ClInclude Include="main\AsyncKJW.h">
+      <Filter>main</Filter>
+    </ClInclude>
+    <ClInclude Include="main\session.hpp">
+      <Filter>main</Filter>
+    </ClInclude>
+    <ClInclude Include="main\session.ipp">
+      <Filter>main</Filter>
+    </ClInclude>
+    <ClInclude Include="network\module_info.h">
+      <Filter>network</Filter>
+    </ClInclude>
+    <ClInclude Include="network\modules\serial_handler.h">
+      <Filter>network\modules</Filter>
+    </ClInclude>
+    <ClInclude Include="network\modules\tcp_client_handler.h">
+      <Filter>network\modules</Filter>
+    </ClInclude>
+    <ClInclude Include="network\modules\tcp_server_handler.h">
+      <Filter>network\modules</Filter>
+    </ClInclude>
+    <ClInclude Include="network\modules\udp_handler.h">
+      <Filter>network\modules</Filter>
+    </ClInclude>
+    <ClInclude Include="pch.h">
+      <Filter>project</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="dllmain.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="pch.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="common\thread_pool.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="config\config_manager.cpp">
+      <Filter>config</Filter>
+    </ClCompile>
+    <ClCompile Include="main\AsyncKJW.cpp">
+      <Filter>main</Filter>
+    </ClCompile>
+    <ClCompile Include="network\modules\serial_handler.cpp">
+      <Filter>network\modules</Filter>
+    </ClCompile>
+    <ClCompile Include="network\modules\tcp_client_handler.cpp">
+      <Filter>network\modules</Filter>
+    </ClCompile>
+    <ClCompile Include="network\modules\tcp_server_handler.cpp">
+      <Filter>network\modules</Filter>
+    </ClCompile>
+    <ClCompile Include="network\modules\udp_handler.cpp">
+      <Filter>network\modules</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>
