@@ -5,13 +5,25 @@ namespace II
 	{
 		namespace modules
 		{
+			enum IO_OPERATION { OP_ACCEPT, OP_READ, OP_WRITE };
+
+			struct PER_IO_DATA {
+				OVERLAPPED overlapped;		// For asynchronous operation tracking
+				WSABUF wsaBuf;				// Data buffer descriptor
+				char* buffer;				// Dynamically allocated buffer
+				DWORD bytesSent;			// Number of bytes sent (for write tracking)
+				DWORD totalSize;			// Total data size to be sent/received
+				IO_OPERATION operationType;  // Identifies the I/O operation type
+			};
+
 			class tcp_server_handler:
 				public	std::enable_shared_from_this< tcp_server_handler >
 			{
 			private:
 				static	tcp_server_handler*			_this; // 셀프 포인터
-				II::thread_pool						_pool; // 스레드 풀
-				//std::thread							_main_thread;
+			//	II::thread_pool						_pool; // 스레드 풀 int numThreads = sysInfo.dwNumberOfProcessors * 2;
+
+				std::vector<std::thread> workers;
 			public:
 				using receive_callback = std::function<void(short interface_id_, unsigned char* buffer, int size_)>; // 콜백 함수 타입
 
@@ -21,7 +33,7 @@ namespace II
 				~tcp_server_handler(); // 파괴자
 
 				void set_info(const session_info& _info); // 설정
-
+				int setNonBlocking(int fd);
 				bool start(); // 시작
 				bool stop(); // 정지	
 				bool accept_connection(); // 클라이언트 연결 승인
@@ -55,11 +67,11 @@ namespace II
 					std::thread _write_thread;*/
 				};
 				std::map<int, client_context> _client_socket;
-				//std::map<int, client_context> _newly_added_client_socket;
+				std::map<int, client_context> _newly_added_client_socket;
 
 				void on_read(unsigned char* received_text_, int size_); // 데이터 수신시 불려지는 함수.
-				bool read(); // 수신
-				bool write(); // 송신
+				void read(); // 수신
+				void write(); // 송신
 				//unsigned char _outbound_packet[_buffer_size] = {}; // 송신용 데이터
 				//unsigned char _inbound_packet[_buffer_size] = {}; // 수신용 데이터
 				std::deque<std::pair<unsigned char*, int>> _outbound_q; // 데이터 송신용 queue 
@@ -67,11 +79,16 @@ namespace II
 
 				std::mutex _read_mutex; // 수신용 queue에 대한 mutex
 				std::mutex _write_mutex; // 송신용 queue에 대한 mutex 
-				//std::mutex _contexts_mutex;
+				std::mutex _contexts_mutex;
 				bool _print_to_console = true; // 콘솔에 프린트를 할 것인지 여부
-				bool _first_time = true; // 처음 데이터를 읽는지 여부
+				//bool _first_time = true; // 처음 데이터를 읽는지 여부
 				bool _is_running = false; // 현재 통신이 시작되었는지 여부
 				bool _connected = false; // 현재 통신이 시작되었는지 여부
+
+				HANDLE _iocp;
+				//PER_IO_DATA* _ioData;
+				//char			mRecvBuf[MAX_SOCKBUF]
+				int numThreads;
 			public:
 				bool is_running();
 			};

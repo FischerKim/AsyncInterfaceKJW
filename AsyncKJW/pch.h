@@ -5,13 +5,16 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <winsock2.h>
-#pragma comment(lib, "Ws2_32.lib")
 #include <ws2tcpip.h>
+#include <mswsock.h>
+#pragma comment(lib, "Ws2_32.lib")
 #else // Assuming Linux/Unix system
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h> // For sockaddr_in
 #include <arpa/inet.h>   // For inet_pton
+#include <sys/epoll.h>
+#include <fcntl.h>
 #endif 
 #include <memory>
 #include <map>

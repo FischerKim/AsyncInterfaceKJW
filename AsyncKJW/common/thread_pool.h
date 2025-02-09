@@ -24,6 +24,7 @@ namespace II
 
         std::vector<std::thread> threads;               // 쓰레드 풀
         std::queue<std::function<void()>> task_queue;   // Task를 담는 Queue
+        //std::queue<std::function<void(void*)>> task_queue; (LPVOID lpParam) -> DWORD 
         std::mutex queue_mutex;                         // queue 접근 용 Mutex
         std::condition_variable cv;                     // 특정 조건이 충족될 때까지 쓰레드를 차단하기 위해 동시 프로그래밍에서 사용되는 동기화 기본 요소
         std::atomic<bool> stop_flag;                    // 쓰레드 정지를 위한 Flag
