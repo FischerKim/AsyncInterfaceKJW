@@ -43,8 +43,9 @@ namespace II
     {
         namespace modules
         {
-            static const int _buffer_size = 1024;
-            static const int _reconnect_time_ = 100;
+            #define MAX_EVENTS 10
+            #define BUFFER_SIZE 1024
+            //static const int _reconnect_time_ = 100;
         }
 
         struct session_info

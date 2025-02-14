@@ -5,17 +5,11 @@ namespace II
 	{
 		namespace modules
 		{
-			class tcp_client_handler : 
+			class tcp_client_handler :
 				public	std::enable_shared_from_this< tcp_client_handler >
 			{
 			private:
-				/*static const int _buffer_size = 8192;
-				static const int _reconnect_time_ = 100;*/
-				static	tcp_client_handler*			_this; //셀프 포인터
-				//II::thread_pool						_pool; //스레드 풀
-				//std::vector<std::thread>			_threads;
-				//std::thread							_main_thread;
-
+				static	tcp_client_handler* _this; //셀프 포인터
 				std::vector<std::thread> workers;
 			public:
 				using receive_callback = std::function<void(short interface_id_, unsigned char* buffer, int size_)>; //콜백 함수 타입
@@ -26,7 +20,7 @@ namespace II
 				~tcp_client_handler(); // 파괴자
 
 				void set_info(const session_info& _info); //설정
-				int setNonBlocking(int fd);
+				int set_nonblocking(int fd);
 
 				bool start(); // 시작
 				bool stop(); // 정지	
@@ -51,8 +45,6 @@ namespace II
 				using socket_address_type2 = struct sockaddr;
 				int socket_error_type = SO_ERROR;
 #endif
-				//unsigned char _outbound_packet[_buffer_size] = {}; // 송신용 데이터
-				//unsigned char _inbound_packet[_buffer_size] = {}; // 수신용 데이터
 				std::deque<std::pair<unsigned char*, int>> _outbound_q; // 데이터 송신용 queue 
 				std::deque<std::pair<unsigned char*, int>> _inbound_q; // 데이터 수신용 queue
 				std::mutex _read_mutex;  // 수신용 queue에 대한 mutex 현재 lock은 모두 thread_pool에서 관리.
@@ -63,8 +55,13 @@ namespace II
 				bool _print_to_console = true; // 콘솔에 프린트를 할 것인지 여부
 				bool _is_running = false; // 현재 통신이 시작되었는지 여부
 				bool _connected = false; // 현재 통신이 시작되었는지 여부
-
+#ifndef LINUX
 				HANDLE _iocp;
+#else
+				int epoll_fd;
+				struct epoll_event ev, events[MAX_EVENTS];
+				std::condition_variable cv;;
+#endif
 			protected:
 				socket_type  _client_socket; // TCP 클라이언트 소켓 (non-pointer approach)
 				socket_address_type	server_ep; //소켓 주소

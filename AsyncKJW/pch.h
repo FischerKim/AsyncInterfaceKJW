@@ -2,19 +2,18 @@
 #ifndef SESSION_IPP
 #define SESSION_IPP
 #ifndef LINUX
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <mswsock.h>
-#pragma comment(lib, "Ws2_32.lib")
+	#define WIN32_LEAN_AND_MEAN
+	#include <windows.h>
+	#include <winsock2.h>
+	#pragma comment(lib, "Ws2_32.lib")
+	#include <ws2tcpip.h>
 #else // Assuming Linux/Unix system
+#include <cstdint>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h> // For sockaddr_in
 #include <arpa/inet.h>   // For inet_pton
 #include <sys/epoll.h>
-#include <fcntl.h>
 #endif 
 #include <memory>
 #include <map>
@@ -49,7 +48,6 @@
 #include <termios.h> // Contains POSIX terminal control definitions
 #include <unistd.h> // write(), read(), close()
 #endif
-#include <common/thread_pool.h>
 #include <common/type.h>
 //#include <common/usertypedef.h>
 #include <network/module_info.h>

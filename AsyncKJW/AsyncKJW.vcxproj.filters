@@ -22,9 +22,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="common\thread_pool.h">
-      <Filter>common</Filter>
-    </ClInclude>
     <ClInclude Include="common\type.h">
       <Filter>common</Filter>
     </ClInclude>
@@ -65,9 +62,6 @@
     </ClCompile>
     <ClCompile Include="pch.cpp">
       <Filter>project</Filter>
-    </ClCompile>
-    <ClCompile Include="common\thread_pool.cpp">
-      <Filter>common</Filter>
     </ClCompile>
     <ClCompile Include="config\config_manager.cpp">
       <Filter>config</Filter>

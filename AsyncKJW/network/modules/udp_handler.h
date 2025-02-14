@@ -9,10 +9,9 @@ namespace II
 				public	std::enable_shared_from_this< udp_handler >
 			{
 			private:
-				static	udp_handler*				_this; //셀프 포인터
-				II::thread_pool						_pool; //스레드 풀
-				//std::vector<std::thread>			_threads;
-			public:		
+				//static	udp_handler* _this; //셀프 포인터
+				std::vector<std::thread> workers;
+			public:
 				using receive_callback = std::function<void(short interface_id_, unsigned char* buffer, int size_)>; //콜백 함수 타입
 
 				udp_handler(); // 생성자
@@ -28,8 +27,8 @@ namespace II
 				void send_message(short destination_id_, unsigned char* buffer_, int size_); // 데이터 송신
 				void register_callback(receive_callback callback_) { _receive_callback = callback_; } // 콜백 함수 등록
 			private:
-				unsigned char		_outbound_packet[_buffer_size] = {}; //initialize it with zeros
-				unsigned char		_inbound_packet[_buffer_size] = {};
+				unsigned char		_outbound_packet[BUFFER_SIZE] = {}; //initialize it with zeros
+				unsigned char		_inbound_packet[BUFFER_SIZE] = {};
 
 				void on_read(unsigned char* received_text_, int size_); // 데이터 수신시 불려지는 함수.
 				bool read(); // 수신

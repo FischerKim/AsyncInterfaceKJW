@@ -1,10 +1,11 @@
-#pragma once
+ï»¿#pragma once
 namespace II
 {
 	namespace network
 	{
 		namespace modules
 		{
+#ifndef LINUX
 			enum IO_OPERATION { OP_ACCEPT, OP_READ, OP_WRITE };
 
 			struct PER_IO_DATA {
@@ -16,40 +17,53 @@ namespace II
 				IO_OPERATION operationType;  // Identifies the I/O operation type
 			};
 
-			class tcp_server_handler:
+#else
+			typedef union epoll_data {
+				void* ptr;
+				int fd;
+				uint32_t u32;
+				uint64_t u64;
+			} epoll_data_t;
+
+			//struct epoll_event
+			//{
+			//	uint32_t events; /* Epoll events */
+			//	epoll_data_t data; /* User data variable */
+			//};
+
+#endif
+			class tcp_server_handler :
 				public	std::enable_shared_from_this< tcp_server_handler >
 			{
 			private:
-				static	tcp_server_handler*			_this; // ¼¿ÇÁ Æ÷ÀÎÅÍ
-			//	II::thread_pool						_pool; // ½º·¹µå Ç® int numThreads = sysInfo.dwNumberOfProcessors * 2;
-
+				static	tcp_server_handler* _this; // ì…€í”„ í¬ì¸í„°
 				std::vector<std::thread> workers;
 			public:
-				using receive_callback = std::function<void(short interface_id_, unsigned char* buffer, int size_)>; // Äİ¹é ÇÔ¼ö Å¸ÀÔ
+				using receive_callback = std::function<void(short interface_id_, unsigned char* buffer, int size_)>; // ì½œë°± í•¨ìˆ˜ íƒ€ì…
 
-				tcp_server_handler(); // »ı¼ºÀÚ
-				tcp_server_handler(const tcp_server_handler&) = delete; // ÇØ´ç °´Ã¼ÀÇ º¹Á¦´Â ºÒ°¡.
-				tcp_server_handler& operator=(const tcp_server_handler&) = delete; // ÇØ´ç °´Ã¼ÀÇ assignÀº ºÒ°¡.
-				~tcp_server_handler(); // ÆÄ±«ÀÚ
+				tcp_server_handler(); // ìƒì„±ì
+				tcp_server_handler(const tcp_server_handler&) = delete; // í•´ë‹¹ ê°ì²´ì˜ ë³µì œëŠ” ë¶ˆê°€.
+				tcp_server_handler& operator=(const tcp_server_handler&) = delete; // í•´ë‹¹ ê°ì²´ì˜ assignì€ ë¶ˆê°€.
+				~tcp_server_handler(); // íŒŒê´´ì
 
-				void set_info(const session_info& _info); // ¼³Á¤
-				int setNonBlocking(int fd);
-				bool start(); // ½ÃÀÛ
-				bool stop(); // Á¤Áö	
-				bool accept_connection(); // Å¬¶óÀÌ¾ğÆ® ¿¬°á ½ÂÀÎ
+				void set_info(const session_info& _info); // ì„¤ì •
+				int set_nonblocking(int fd);
+				bool start(); // ì‹œì‘
+				bool stop(); // ì •ì§€	
+				bool accept_connection(); // í´ë¼ì´ì–¸íŠ¸ ì—°ê²° ìŠ¹ì¸
 
-				void send_message(short interface_id_, unsigned char* buffer_, int size_); // µ¥ÀÌÅÍ ¼Û½Å
-				void register_callback(receive_callback callback_) { _receive_callback = callback_; } // Äİ¹é ÇÔ¼ö µî·Ï
-				int num_users_connected(); // ¼­¹ö¿¡ ¿¬°áµÈ Å¬¶óÀÌ¾ğÆ® ¼ö.
+				void send_message(short interface_id_, unsigned char* buffer_, int size_); // ë°ì´í„° ì†¡ì‹ 
+				void register_callback(receive_callback callback_) { _receive_callback = callback_; } // ì½œë°± í•¨ìˆ˜ ë“±ë¡
+				int num_users_connected(); // ì„œë²„ì— ì—°ê²°ëœ í´ë¼ì´ì–¸íŠ¸ ìˆ˜.
 			private:
-				receive_callback _receive_callback; // Äİ¹é ÇÔ¼ö
-				int _num_users_entered = 0; // Å¬¶óÀÌ¾ğÆ® ¼ö
-				int _num_users_exited = 0; // Å¬¶óÀÌ¾ğÆ® ¼ö
-				tcp_info _tcp_info; // TCP Åë½Å ¼³Á¤ °ªµé
+				receive_callback _receive_callback; // ì½œë°± í•¨ìˆ˜
+				int _num_users_entered = 0; // í´ë¼ì´ì–¸íŠ¸ ìˆ˜
+				int _num_users_exited = 0; // í´ë¼ì´ì–¸íŠ¸ ìˆ˜
+				tcp_info _tcp_info; // TCP í†µì‹  ì„¤ì • ê°’ë“¤
 #ifndef LINUX
-				using socket_type = SOCKET; // TCP ¼ÒÄÏ
-				using socket_address_type = sockaddr_in; // ¼ÒÄÏ ÁÖ¼Ò
-				using socket_address_type2 = sockaddr; // ¼ÒÄÏ ÁÖ¼Ò
+				using socket_type = SOCKET; // TCP ì†Œì¼“
+				using socket_address_type = sockaddr_in; // ì†Œì¼“ ì£¼ì†Œ
+				using socket_address_type2 = sockaddr; // ì†Œì¼“ ì£¼ì†Œ
 				int socket_error_type = SOCKET_ERROR;
 #else
 				using socket_type = int;
@@ -57,38 +71,36 @@ namespace II
 				using socket_address_type2 = struct sockaddr;
 				int socket_error_type = SO_ERROR;
 #endif
-				socket_type _server_socket; // TCP ¼­¹ö ¼ÒÄÏ (non-pointer approach)
-				//std::deque<socket_type> _client_socket; // TCP Å¬¶óÀÌ¾ğÆ® ¼ÒÄÏ
+				socket_type _server_socket; // TCP ì„œë²„ ì†Œì¼“
 				struct client_context
 				{
 					short _id;
 					socket_type _socket;
-					/*std::thread _read_thread;
-					std::thread _write_thread;*/
 				};
 				std::map<int, client_context> _client_socket;
 				std::map<int, client_context> _newly_added_client_socket;
 
-				void on_read(unsigned char* received_text_, int size_); // µ¥ÀÌÅÍ ¼ö½Å½Ã ºÒ·ÁÁö´Â ÇÔ¼ö.
-				void read(); // ¼ö½Å
-				void write(); // ¼Û½Å
-				//unsigned char _outbound_packet[_buffer_size] = {}; // ¼Û½Å¿ë µ¥ÀÌÅÍ
-				//unsigned char _inbound_packet[_buffer_size] = {}; // ¼ö½Å¿ë µ¥ÀÌÅÍ
-				std::deque<std::pair<unsigned char*, int>> _outbound_q; // µ¥ÀÌÅÍ ¼Û½Å¿ë queue 
-				std::deque<std::pair<unsigned char*, int>> _inbound_q; // µ¥ÀÌÅÍ ¼ö½Å¿ë queue
+				void on_read(unsigned char* received_text_, int size_); // ë°ì´í„° ìˆ˜ì‹ ì‹œ ë¶ˆë ¤ì§€ëŠ” í•¨ìˆ˜.
+				void read(); // ìˆ˜ì‹ 
+				void write(); // ì†¡ì‹ 
+				std::deque<std::pair<unsigned char*, int>> _outbound_q; // ë°ì´í„° ì†¡ì‹ ìš© queue 
+				std::deque<std::pair<unsigned char*, int>> _inbound_q; // ë°ì´í„° ìˆ˜ì‹ ìš© queue
 
-				std::mutex _read_mutex; // ¼ö½Å¿ë queue¿¡ ´ëÇÑ mutex
-				std::mutex _write_mutex; // ¼Û½Å¿ë queue¿¡ ´ëÇÑ mutex 
+				std::mutex _read_mutex; // ìˆ˜ì‹ ìš© queueì— ëŒ€í•œ mutex
+				std::mutex _write_mutex; // ì†¡ì‹ ìš© queueì— ëŒ€í•œ mutex 
 				std::mutex _contexts_mutex;
-				bool _print_to_console = true; // ÄÜ¼Ö¿¡ ÇÁ¸°Æ®¸¦ ÇÒ °ÍÀÎÁö ¿©ºÎ
-				//bool _first_time = true; // Ã³À½ µ¥ÀÌÅÍ¸¦ ÀĞ´ÂÁö ¿©ºÎ
-				bool _is_running = false; // ÇöÀç Åë½ÅÀÌ ½ÃÀÛµÇ¾ú´ÂÁö ¿©ºÎ
-				bool _connected = false; // ÇöÀç Åë½ÅÀÌ ½ÃÀÛµÇ¾ú´ÂÁö ¿©ºÎ
-
+				bool _print_to_console = true; // ì½˜ì†”ì— í”„ë¦°íŠ¸ë¥¼ í•  ê²ƒì¸ì§€ ì—¬ë¶€
+				bool _is_running = false; // í˜„ì¬ í†µì‹ ì´ ì‹œì‘ë˜ì—ˆëŠ”ì§€ ì—¬ë¶€
+				bool _connected = false; // í˜„ì¬ í†µì‹ ì´ ì‹œì‘ë˜ì—ˆëŠ”ì§€ ì—¬ë¶€
+#ifndef LINUX
 				HANDLE _iocp;
-				//PER_IO_DATA* _ioData;
-				//char			mRecvBuf[MAX_SOCKBUF]
-				int numThreads;
+#else
+				int epoll_fd;
+				struct epoll_event ev, events[MAX_EVENTS];
+				std::condition_variable cv;
+#endif
+				//PER_IO_DATA* _ioData; //need to be dynamically allocated.
+				//int numThreads;
 			public:
 				bool is_running();
 			};

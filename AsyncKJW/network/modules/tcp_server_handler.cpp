@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 #include <pch.h>
 
 namespace II
@@ -7,20 +7,38 @@ namespace II
 	{
 		namespace modules
 		{
-			tcp_server_handler* tcp_server_handler::_this = nullptr;
+			//tcp_server_handler* tcp_server_handler::_this = nullptr;
+			 
 			//socket -> bind -> listen -> accept -> send/recv
-			tcp_server_handler::tcp_server_handler() //: _pool(4) // »ı¼ºÀÚ
+			tcp_server_handler::tcp_server_handler() // ìƒì„±ì
 			{
-				_this = this;
-
-				SYSTEM_INFO sysInfo;
+				//_this = this;
+#ifndef LINUX
+				/*SYSTEM_INFO sysInfo;
 				GetSystemInfo(&sysInfo);
-				numThreads = sysInfo.dwNumberOfProcessors * 2;
+				numThreads = sysInfo.dwNumberOfProcessors * 2;*/
+#else
+#endif
 			}
 
-			tcp_server_handler::~tcp_server_handler() // ÆÄ±«ÀÚ
+			tcp_server_handler::~tcp_server_handler() // íŒŒê´´ì
 			{
 				_is_running = false;
+
+#ifndef LINUX
+				for (auto& client : _client_socket)
+				{
+					closesocket(client.second._socket);
+				}
+#else
+				for (auto& client : _client_socket)
+				{
+					close(client.second._socket);
+				}
+#endif
+				_client_socket.clear();
+
+
 #ifndef LINUX
 				if (_server_socket != NULL)
 				{
@@ -36,12 +54,19 @@ namespace II
 					close(_server_socket);
 					_server_socket = -1;
 				}
+
+				close(_server_socket);
+				close(epoll_fd);
 #endif
-				/*memset(_outbound_packet, 0, sizeof(_outbound_packet));
-				memset(_inbound_packet, 0, sizeof(_inbound_packet));*/
+				for (auto& t : workers)
+				{
+					if (t.joinable()) {
+						t.join();
+					}
+				}
 			}
 
-			void	tcp_server_handler::set_info(const session_info& info_)  // ¼³Á¤
+			void	tcp_server_handler::set_info(const session_info& info_)  // ì„¤ì •
 			{
 				try
 				{
@@ -58,17 +83,22 @@ namespace II
 				}
 			}
 
-
-			int tcp_server_handler::setNonBlocking(int fd) {
+			//Â serverÂ fdÂ Non-BlockingÂ Socketìœ¼ë¡œÂ ì„¤ì •.Â EdgeÂ TriggerÂ ì‚¬ìš©í•˜ê¸°Â ìœ„í•´Â ì„¤ì •.
+			int tcp_server_handler::set_nonblocking(int fd) 
+			{
 #ifndef LINUX
 #else
 				int flags = fcntl(fd, F_GETFL, 0);
+				if (flags == -1)
+				{
+					return -1;
+				}
 				return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 #endif
-				return -1;
+				return -1; //no need for window
 			}
 
-			void	tcp_server_handler::on_read(unsigned char* buffer_, int size_) // µ¥ÀÌÅÍ ¼ö½Å½Ã ºÒ·ÁÁö´Â ÇÔ¼ö.
+			void	tcp_server_handler::on_read(unsigned char* buffer_, int size_) // ë°ì´í„° ìˆ˜ì‹ ì‹œ ë¶ˆë ¤ì§€ëŠ” í•¨ìˆ˜.
 			{
 				try
 				{
@@ -77,7 +107,6 @@ namespace II
 					//unsigned char* message_copy = new unsigned char[size_]; 
 					//memset(message_copy, 0, size_);
 					//memcpy(message_copy, buffer_, size_);
-					//std::cout << "asdf" << buffer_ << std::endl;
 					_inbound_q.emplace_back(buffer_, size_);
 				}
 				catch (const std::exception& e)
@@ -86,7 +115,7 @@ namespace II
 				}
 			}
 
-			bool	tcp_server_handler::start() // ½ÃÀÛ
+			bool	tcp_server_handler::start() // ì‹œì‘
 			{
 				if (_is_running) return false;
 				std::printf("     L [IFC]  TCP SERVER : %s\n", _tcp_info._name);
@@ -115,8 +144,18 @@ namespace II
 				}
 #else
 				_server_socket = socket(AF_INET, SOCK_STREAM, 0);
-				if (_server_socket == -1) {
+				if (_server_socket == -1) 
+				{
 					std::cerr << "[TCP Server] Error when creating a socket" << std::endl;
+					perror("socket");
+					return false;
+				}
+
+				// Set the socket to be non-blocking
+				if (set_nonblocking(_server_socket) == -1) 
+				{
+					perror("set_nonblocking");
+					close(_server_socket);
 					return false;
 				}
 #endif
@@ -128,11 +167,22 @@ namespace II
 				if (bind(_server_socket, (socket_address_type2*)&server_address, sizeof(server_address)) == -1)
 				{
 					std::cerr << "[TCP Server] Error when binding a socket" << std::endl;
+#ifndef LINUX
+#else
+					perror("bind");
+					close(_server_socket);
+#endif
+					return false;
 				}
 
 				if (listen(_server_socket, SOMAXCONN) == -1)
 				{
 					std::cerr << "Error when listening for incoming connections" << std::endl;
+#ifndef LINUX
+#else
+					perror("listen");
+					close(_server_socket);
+#endif
 					return false;
 				}
 
@@ -140,29 +190,36 @@ namespace II
 					<< std::to_string(_tcp_info._source_port) << std::endl;
 
 #ifndef LINUX
-#else
-				setNonBlocking(_server_socket);
-#endif
-#ifndef LINUX
 				_iocp = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0);
-				CreateIoCompletionPort((HANDLE)_server_socket, _iocp, (ULONG_PTR)_server_socket, 0); //4 ³Ö¾îµµ µÊ
+				CreateIoCompletionPort((HANDLE)_server_socket, _iocp, (ULONG_PTR)_server_socket, 0); //4 ë„£ì–´ë„ ë¨
 #else
-#endif
+				epoll_fd = epoll_create1(0);
+				if (epoll_fd == -1)
+				{
+					perror("epoll_create1");
+					close(_server_socket);
+					return false;
+				}
 
+				// Add the listening socket to the epoll instance
+				ev.events = EPOLLIN | EPOLLET;
+				ev.data.fd = _server_socket; //ì´ fdë¥¼ í†µí•´ ì•ìœ¼ë¡œ epollì— ë“±ë¡ëœ fdë“¤ì„ ì¡°ì‘í•¨.
+				if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, _server_socket, &ev) == -1) //epollì— fd ë“±ë¡
+				{
+					perror("epoll_ctl: _server_socket");
+					close(_server_socket);
+					close(epoll_fd);
+					return false;
+				}
+
+#endif
 				_is_running = true;
-				//_first_time = true;
+
+#ifndef LINUX
 				std::thread accept_thread([this]() {
 					while (true)
 					{
 						this->accept_connection();
-
-						//if (_connected && _first_time)
-						//{
-						//	_first_time = false;
-
-						//	//this->read();
-						//	//this->write();
-						//}
 						std::this_thread::sleep_for(std::chrono::milliseconds(100));
 					}
 					});
@@ -177,15 +234,15 @@ namespace II
 						DWORD bytes_transferred;
 						ULONG_PTR completionKey;
 						PER_IO_DATA* ioData = nullptr;
-						BOOL result = GetQueuedCompletionStatus( // ¿©±â°¡ ºí·ÎÅ· ÄİÀÓ.
+						BOOL result = GetQueuedCompletionStatus( // ì—¬ê¸°ê°€ ë¸”ë¡œí‚¹ ì½œì„.
 							_iocp,
-							&bytes_transferred, //½ÇÁ¦ Àü¼ÛµÈ ¹ÙÀÌÆ®
+							&bytes_transferred, //ì‹¤ì œ ì „ì†¡ëœ ë°”ì´íŠ¸
 							&completionKey,
-							(LPOVERLAPPED*)&ioData, //overlapped IO °´Ã¼
-							INFINITE //´ë±â ½Ã°£
+							(LPOVERLAPPED*)&ioData, //overlapped IO ê°ì²´
+							INFINITE //ëŒ€ê¸° ì‹œê°„
 						);
 
-						//Å¬¶ó°¡ Á¢¼ÓÀ» ²÷¾úÀ»¶§
+						//í´ë¼ê°€ ì ‘ì†ì„ ëŠì—ˆì„ë•Œ
 						if (!result)
 						{
 							DWORD error = GetLastError();
@@ -196,6 +253,22 @@ namespace II
 
 								// Clean up the client socket and resources
 								closesocket((SOCKET)completionKey);
+								std::map<int, client_context>::iterator it = _client_socket.begin();
+								while (it != _client_socket.end())
+								{
+
+									u_long nonBlocking = 0;
+									int isvalid = ioctlsocket(it->second._socket, FIONBIO, &nonBlocking);
+									if (isvalid == SOCKET_ERROR) {
+										std::cerr << it->first << " Socket is not valid: " << WSAGetLastError() << std::endl;
+										auto it_to_erase = it;
+										_client_socket.erase(it_to_erase); 
+										_num_users_exited++;
+										++it;
+										continue;
+									}								
+									++it;
+								}
 								delete ioData;
 							}
 							continue;
@@ -204,7 +277,7 @@ namespace II
 							std::cerr << "[TCP Server] Null overlapped structure!" << std::endl;
 							continue;  // Avoid dereferencing
 						}
-						// Å¬¶óÀÌ¾ğÆ® µî·Ï
+						// í´ë¼ì´ì–¸íŠ¸ ë“±ë¡
 						if (ioData->operationType == OP_ACCEPT)
 						{
 							//							std::cout << "[1.." << std::endl;
@@ -268,11 +341,10 @@ namespace II
 						//Overlapped I/O Recv 
 						else if (ioData->operationType == OP_READ)
 						{
+							//std::unique_lock<std::mutex> client_lock(_contexts_mutex);
+							//std::cout << "[TCP Server] read IOCP Called.." << std::endl;  //OK
 
-							std::unique_lock<std::mutex> client_lock(_contexts_mutex);
-							/*	std::cout << "[read IOCP Called.." << std::endl;*/  //OK
-
-							SOCKET client_socket = static_cast<SOCKET>(completionKey);
+							//SOCKET client_socket = static_cast<SOCKET>(completionKey);
 
 							/*std::cout << "[READ] Received " << bytes_transferred << " bytes from client "
 								<< std::string(ioData->buffer, bytes_transferred) << std::endl;*/
@@ -288,31 +360,74 @@ namespace II
 							}
 
 							delete ioData;
-							//this->read();
+							this->read(); // read í•¨ìˆ˜ ìì²´ëŠ” ë£¨í”„ì—ì„œ ë¹ ì§€ê³  iocpê°€ ë‚˜ì¤‘ì— ì½œí•˜ê¸° ë•Œë¬¸ì— stackoverflow ìœ„í—˜ì€ ì—†ìŒ.
 						}
 						//Overlapped I/O Send
 						else if (ioData->operationType == OP_WRITE)
 						{
-							//std::cout << "[TCP Server] write IOCP Called.." << std::endl; //OK
-
+							//std::cout << "[TCP Server] write IOCP Called.." << std::endl;
 							delete ioData;
-							//	this->write();
+							//this->read();
 						}
 						else
 						{
 							std::cout << "undefined operation" << std::endl;
 						}
-
 						//std::this_thread::sleep_for(std::chrono::milliseconds(5));
 					}
 					});
 
 				workers.emplace_back(std::move(iocp_thread));
+#else
+				std::thread epoll_thread([this]() {
+					while (true)
+					{
+						int nfds = epoll_wait(epoll_fd, events, MAX_EVENTS, -1); //-1ì´ë©´ waiting time inifinite
+						if (nfds == -1)
+						{
+							perror("epoll_wait");
+							close(_server_socket);
+							close(epoll_fd);
+							return false;
+						}
+						/*
+						EPOLLIN : ìˆ˜ì‹ í•  ë°ì´í„°ê°€ ìˆë‹¤.Â 
+						EPOLLOUT :Â ì†¡ì‹  ê°€ëŠ¥í•˜ë‹¤.Â 
+						EPOLLPRIÂ : ì¤‘ìš”í•œ ë°ì´í„°(OOB) ë°œìƒ.Â 
+						EPOLLRDHUDÂ : ì—°ê²° ì¢…ë£Œ ë˜ëŠ” Half-close ë°œìƒÂ 
+						EPOLLERRÂ : ì—ëŸ¬ ë°œìƒÂ 
+						EPOLLETÂ : ì—£ì§€ íŠ¸ë¦¬ê±° ë°©ì‹ìœ¼ë¡œ ì„¤ì •(ê¸°ë³¸ì€ ë ˆë²¨ íŠ¸ë¦¬ê±° ë°©ì‹)Â 
+						EPOLLONESHOT : í•œë²ˆë§Œ ì´ë²¤íŠ¸ ë°›ìŒÂ 
+						*/
+						for(int i = 0; i < nfds; i++)
+						{
+							if (events[i].data.fd == _server_socket)
+							{
+								this->accept_connection();
+								std::this_thread::sleep_for(std::chrono::milliseconds(100));					
+							}
+							else //if client socket has event.
+							{
+								if (events[i].events & EPOLLIN)
+								{
+									this->read();
+								}
+								if (events[i].events & EPOLLOUT) 
+								{
+									this->write();
+								}
+							}
+						}
+					}
+					});
+
+				workers.emplace_back(std::move(epoll_thread));
+#endif
 
 				std::thread callback_thread([this]() {
 					while (true)
 					{
-						while (!_inbound_q.empty())
+						if (!_inbound_q.empty())
 						{
 							std::unique_lock<std::mutex> lock(_read_mutex);
 
@@ -339,14 +454,14 @@ namespace II
 
 				workers.emplace_back(std::move(callback_thread));
 
-				std::thread read_thread([this]() {
+				/*std::thread read_thread([this]() {
 					while (true)
 					{
 						read();
 					}
 					});
 
-				workers.emplace_back(std::move(read_thread));
+				workers.emplace_back(std::move(read_thread));*/
 
 				std::thread write_thread([this]() {
 					while (true)
@@ -356,13 +471,14 @@ namespace II
 					});
 
 				workers.emplace_back(std::move(write_thread));
+
 				return true;
 			}
 
-			bool	tcp_server_handler::stop() // Á¤Áö	
+			bool	tcp_server_handler::stop() // ì •ì§€	
 			{
 				bool result = false;
-				//_pool.push([this, &result]() { //pool takes care of the lock
+
 				try
 				{
 					std::unique_lock<std::mutex> lock(_contexts_mutex);
@@ -375,18 +491,40 @@ namespace II
 					{
 						closesocket(client.second._socket);
 					}
-					if (_server_socket != NULL) closesocket(_server_socket);
 #else
 					for (auto& client : _client_socket)
 					{
 						close(client.second._socket);
 					}
-					if (_server_socket >= 0) close(_server_socket);
 #endif
 					_client_socket.clear();
 
-					//_main_thread.join();
+#ifndef LINUX
+					if (_server_socket != NULL)
+					{
+						shutdown(_server_socket, SD_BOTH);
+						closesocket(_server_socket);
+						_server_socket = NULL;
+					}
+#else
+					if (_server_socket >= 0)
+					{
+						shutdown(_server_socket, SHUT_RDWR);
+						close(_server_socket);
+						_server_socket = -1;
+					}
+
+					close(_server_socket);
+					close(epoll_fd);
+#endif
+					for (auto& t : workers)
+					{
+						if (t.joinable()) {
+							t.join(); //joinì´ ë ìˆ˜ ì—†ìŒ waiting time ì´ infiniteë¼
+						}
+					}
 					std::cout << "[TCP Server]: Stopped " << std::endl;
+
 				}
 				catch (const std::exception& e)
 				{
@@ -394,18 +532,17 @@ namespace II
 					result = false;
 				}
 				result = true;
-				//	});
 				return result;
 			}
 
-			void	tcp_server_handler::send_message(short destination_id_, unsigned char* buffer_, int size_) // µ¥ÀÌÅÍ ¼Û½Å
+			void	tcp_server_handler::send_message(short destination_id_, unsigned char* buffer_, int size_) // ë°ì´í„° ì†¡ì‹ 
 			{
-				//_pool.push([this, size_, buffer_]() { //pool takes care of the lock
 				try
 				{
+					//std::cout << "server send called" << std::endl;
 					std::unique_lock<std::mutex>lock(_write_mutex);
 
-					//1024 ¹ÙÀÌÆ® ÀÌ»óÀÏ °æ¿ì ³ª´²¼­ ¼Û½Å 
+					//1024 ë°”ì´íŠ¸ ì´ìƒì¼ ê²½ìš° ë‚˜ëˆ ì„œ ì†¡ì‹  
 					int num_chunks = size_ / 1024;
 					int remaining_bytes = size_ % 1024;
 					for (int i = 0; i < num_chunks; ++i)
@@ -428,7 +565,6 @@ namespace II
 				{
 					std::cerr << "[TCP Server] Error: " << e.what() << std::endl;
 				}
-				//	});
 			}
 
 			bool	tcp_server_handler::accept_connection()
@@ -450,26 +586,48 @@ namespace II
 						client_context oclient;
 						oclient._id = _num_users_entered;
 						oclient._socket = client_socket;
-						int recvTimeout = 5;  // 5 ms
+#ifndef LINUX
+						int recvTimeout = 0;
 						if (setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&recvTimeout, sizeof(recvTimeout)) == SOCKET_ERROR) {
 							std::cerr << "[TCP Server]: setsockopt(SO_RCVTIMEO) failed: " << WSAGetLastError() << std::endl;
 						}
 						CreateIoCompletionPort((HANDLE)oclient._socket, _iocp, (ULONG_PTR)&oclient._socket, 0); // does not require locking
 						_newly_added_client_socket.insert(std::make_pair(_num_users_entered, std::move(oclient)));
+#else
+						set_nonblocking(client_socket);
+						struct timeval recvTimeout;
+						recvTimeout.tv_sec = 0;
+						recvTimeout.tv_usec = 0;  // 5 ms
+						if (setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, &recvTimeout, sizeof(recvTimeout)) < 0) {
+							std::cerr << "[TCP Server]: setsockopt(SO_RCVTIMEO) failed: " << strerror(errno) << std::endl;
+						}
+						ev.events = EPOLLIN | EPOLLET; //EPOLLETì€ ì—£ì§€ íŠ¸ë¦¬ê±° ë°©ì‹ìœ¼ë¡œ, ë³€í™”ê°€ ìˆì„ë•Œë§Œ ì´ë²¤íŠ¸ ë°œìƒì‹œí‚¨ë‹¤.
+						ev.data.fd = client_socket;
+						if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_socket, &ev) == -1)
+						{
+							perror("epoll_ctl: conn_fd");
+							close(client_socket);
+							close(_server_socket);
+							close(epoll_fd);
+							return false;
+						}
+#endif
 
 						socket_address_type client_addr;
 #ifndef LINUX
 						int client_addr_len = sizeof(client_addr);
-#else
-						socklen_t client_addr_len = sizeof(client_addr);
-#endif
 						getpeername(client_socket, (socket_address_type2*)&client_addr, &client_addr_len);
-				
+
 						int port = ntohs(client_addr.sin_port);
 						std::string address = inet_ntoa(client_addr.sin_addr);
 
 						std::cout << " [IFC]  TCP Server : Accepted a Client IP: " << address
 							<< " Port: " << std::to_string(port) << std::endl;
+#else
+						socklen_t client_addr_len = sizeof(client_addr);
+#endif
+						write(); //ì™œëƒë©´ ì—¬ê¸°ì„œ ìƒˆë¡œ ë“¤ì–´ì˜¨ í´ë¼ë¥¼ í™•ì¸í•¨.
+						read();
 
 						_num_users_entered++;
 						_connected = true;
@@ -484,7 +642,7 @@ namespace II
 			}
 
 #pragma region AcceptEx
-			//void	tcp_server_handler::accept_connection() // Å¬¶óÀÌ¾ğÆ® ¿¬°á ½ÂÀÎ
+			//void	tcp_server_handler::accept_connection() // í´ë¼ì´ì–¸íŠ¸ ì—°ê²° ìŠ¹ì¸
 			//{
 			//	try
 			//	{
@@ -547,20 +705,27 @@ namespace II
 			//	}
 			//}
 #pragma endregion
-			void	tcp_server_handler::read() // ¼ö½Å //ºñµ¿±âÀÏ¶§ Context´Â ÇÑ°³´Ù.
+			void	tcp_server_handler::read() // ìˆ˜ì‹  //ë¹„ë™ê¸°ì¼ë•Œ ContextëŠ” í•œê°œë‹¤.
 			{
 				try
 				{
-					std::unique_lock<std::mutex> lock(_contexts_mutex);
-					std::map<int, client_context>::iterator it = _client_socket.begin();
-					while (it != _client_socket.end())
+					if (_connected == true && _client_socket.size() == 0) //ì´ ê²½ìš°ëŠ” í´ë¼ê°€ ë“¤ì–´ì™”ë‹¤ê°€ ë‚˜ê°€ì„œ í´ë¼ ìˆ˜ê°€ 0ì´ ë¬ì„ë•Œ
 					{
+						std::this_thread::sleep_for(std::chrono::milliseconds(100));
+						accept_connection();
+					}
 
+					//std::unique_lock<std::mutex> lock(_contexts_mutex);
+					std::map<int, client_context>::iterator it = _client_socket.begin();
+					while (it != _client_socket.end()) // it is guranteed to be read since client socket will always be more than 1.
+					{
+						//	std::cout << "server: read called" << std::endl;
+#ifndef LINUX
 						PER_IO_DATA* readData = new PER_IO_DATA{};
 						readData->operationType = OP_READ;
-						readData->buffer = new char[_buffer_size];
+						readData->buffer = new char[BUFFER_SIZE];
 						readData->wsaBuf.buf = readData->buffer;
-						readData->wsaBuf.len = _buffer_size;
+						readData->wsaBuf.len = BUFFER_SIZE;
 
 						//bytes_transferred = recv(it->second._socket, received_data, _buffer_size, 0); //blocking call
 						DWORD flags = 0;
@@ -573,13 +738,26 @@ namespace II
 							&readData->overlapped,
 							NULL                    // No completion routine (IOCP handles it)
 						);
-						//5 milisec timeout
 
 						if (ret == SOCKET_ERROR && WSAGetLastError() != WSA_IO_PENDING) {
 							//std::cerr << "WSARecv failed: " << WSAGetLastError() << std::endl;
 							delete[] readData->buffer;
 							delete readData;
 						}
+#else
+						char buffer[BUFFER_SIZE];
+						ssize_t bytes_transferred = recv(it->second._socket, buffer, sizeof(buffer), 0);
+
+						if (bytes_transferred > 0)
+						{
+							unsigned char* received_data_unsigned = new unsigned char[bytes_transferred];
+							memset(received_data_unsigned, 0, sizeof(received_data_unsigned));
+							std::memcpy(received_data_unsigned, buffer, bytes_transferred);
+							this->on_read(std::move(received_data_unsigned), bytes_transferred);
+							delete[] buffer;
+							//buffer = nullptr;
+						}
+#endif
 						++it;
 					}
 				}
@@ -590,12 +768,20 @@ namespace II
 				std::this_thread::sleep_for(std::chrono::milliseconds(5));
 			}
 
-			void	tcp_server_handler::write() // ¼Û½Å
+			void	tcp_server_handler::write() // ì†¡ì‹ 
 			{
 				try
 				{
-					std::unique_lock<std::mutex> client_lock(_contexts_mutex);
-					if (!_newly_added_client_socket.empty()) {
+					/*if (_connected == false)
+					{
+						std::this_thread::sleep_for(std::chrono::milliseconds(100));
+						return;
+					}*/
+
+					if (!_newly_added_client_socket.empty())
+					{
+						std::unique_lock<std::mutex> client_lock(_contexts_mutex);
+						
 						_client_socket.insert(
 							std::make_move_iterator(_newly_added_client_socket.begin()),
 							std::make_move_iterator(_newly_added_client_socket.end())
@@ -603,8 +789,10 @@ namespace II
 						_newly_added_client_socket.clear();
 
 
+
 						std::map<int, client_context>::iterator it = _client_socket.begin();
 						std::cout << "[TCP Server] Total clients: " << _client_socket.size();
+#ifndef LINUX
 						while (it != _client_socket.end())
 						{
 							socket_address_type client_addr;
@@ -618,26 +806,32 @@ namespace II
 								<< " Port: " << std::to_string(port) << std::endl;
 							it++;
 						}
+#else
 
+#endif
 					}
 
-
+					unsigned char* unsigned_buffer = nullptr;
+					int size = 0;
 					if (!_outbound_q.empty())
 					{
+						//std::cout << "server: write called" << std::endl;
 						std::unique_lock<std::mutex>lock(_write_mutex);
 						auto& front = _outbound_q.front();
-						unsigned char* unsigned_buffer = front.first;
-						int size = front.second;
+						unsigned_buffer = front.first;
+						size = front.second;
 						_outbound_q.pop_front();
-
+					}
+					if (size > 0)
+					{
+						//std::unique_lock<std::mutex> lock(_contexts_mutex);
 						char* signed_buffer = new char[size];
 						memset(signed_buffer, 0, size);
 						memcpy(signed_buffer, unsigned_buffer, size);
-
 						std::map<int, client_context>::iterator it = _client_socket.begin();
 						while (it != _client_socket.end())
 						{
-
+#ifndef LINUX
 							PER_IO_DATA* writeData = new PER_IO_DATA{};
 
 							writeData->operationType = OP_WRITE;
@@ -657,20 +851,10 @@ namespace II
 							int port = ntohs(client_addr.sin_port);
 							std::string address = inet_ntoa(client_addr.sin_addr);
 
-							std::cout << " Writing to-> Client ID: " << it->first << " Client IP: " << address
-								<< " Port: " << std::to_string(port) << std::endl;
+							/*	std::cout << " Writing to-> Client ID: " << it->first << " Client IP: " << address
+									<< " Port: " << std::to_string(port) << std::endl;*/
 
-						/*	u_long nonBlocking = 0;
-							int isvalid = ioctlsocket(it->second._socket, FIONBIO, &nonBlocking);
-							if (isvalid == SOCKET_ERROR) {
-								std::cerr << "Socket is not valid: " << WSAGetLastError() << std::endl;
-								return;
-							}
-							else
-							{
-								std::cout << " Valid " << std::endl;
-							}*/
-							//-----------------
+							
 
 							int ret = WSASend(
 								it->second._socket,
@@ -682,68 +866,83 @@ namespace II
 								NULL                 // No completion routine, as IOCP handles completion
 							);
 							//if (signed_buffer != nullptr && size > 0) ret = WSASend(it->second._socket, signed_buffer, size, 0); //blocking call
+#else
+							ssize_t written = send(it->second._socket, signed_buffer, size, 0);
+							if (written == -1) 
+							{
+								perror("send");
+								close(it->second._socket);
+								auto it_to_erase = it;
+								_client_socket.erase(it_to_erase);
+								++it;
+								continue;
+							}
 
+							// Re-arm the EPOLLOUT event for this client
+							//struct epoll_event ev;
+							ev.events = EPOLLOUT | EPOLLET;
+							ev.data.fd = it->second._socket;
+							if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, it->second._socket, &ev) == -1) 
+							{
+								perror("epoll_ctl: mod it->second._socket");
+								close(it->second._socket); 
+							}
+#endif
 
+#ifndef LINUX
 							if (ret == socket_error_type)
 							{
-#ifndef LINUX
 								if (WSAGetLastError())// == WSAENOTCONN)
 								{
 									std::cout << "Disconnected" << std::endl;
 									_is_running = false;
 									//closesocket(*it);
-									closesocket(it->second._socket);
-									_num_users_exited++;
+									//closesocket(it->second._socket);
+									//_num_users_exited++;
 								}
-#else
-								if (errno)
-								{
-									std::cout << "Disconnected" << std::endl;
-									_is_running = false;
-									//close(*it);
-									close(it->second._socket);
-									_num_users_exited++;
-								}
-#endif       
-								auto it_to_erase = it;
+								/*auto it_to_erase = it;
+								_client_socket.erase(it_to_erase);*/
 								++it;
-								_client_socket.erase(it_to_erase);
 								continue;
 							}
-							delete[] signed_buffer;
-							signed_buffer = nullptr;
-#ifndef LINUX
-							if (_CrtIsValidHeapPointer(unsigned_buffer))
-							{
-								delete[] unsigned_buffer;
-								unsigned_buffer = nullptr;
-							}
-#else								
-							if (unsigned_buffer)
-							{
-								delete[] unsigned_buffer;
-								unsigned_buffer = nullptr; // Avoid dangling pointer
-							}
-#endif
+#else
+#endif       
 							++it;
+							std::this_thread::sleep_for(std::chrono::milliseconds(5));
 						}
-						std::this_thread::sleep_for(std::chrono::milliseconds(5));
+
+						delete[] signed_buffer;
+						signed_buffer = nullptr;
+#ifndef LINUX
+						if (_CrtIsValidHeapPointer(unsigned_buffer))
+						{
+							delete[] unsigned_buffer;
+							unsigned_buffer = nullptr;
+						}
+#else								
+						if (unsigned_buffer)
+						{
+							delete[] unsigned_buffer;
+							unsigned_buffer = nullptr; // Avoid dangling pointer
+						}
+#endif
+						//	std::this_thread::sleep_for(std::chrono::milliseconds(5));
 					}
 				}
 				catch (const std::exception& e)
 				{
 					std::cerr << "[TCP Server] Write Error: " << e.what() << std::endl;
 				}
-				std::this_thread::sleep_for(std::chrono::milliseconds(5));
+				std::this_thread::sleep_for(std::chrono::milliseconds(10));
 			}
 
-			int		tcp_server_handler::num_users_connected()  // ¼­¹ö¿¡ ¿¬°áµÈ Å¬¶óÀÌ¾ğÆ® ¼ö.
+			int		tcp_server_handler::num_users_connected()  // ì„œë²„ì— ì—°ê²°ëœ í´ë¼ì´ì–¸íŠ¸ ìˆ˜.
 			{
-				//ÇÏÆ®ºñÆ®¸¦ ±â´ÉÀ» ³Ö¾î¼­ determineÇØ¾ßÇÔ.
+				//í•˜íŠ¸ë¹„íŠ¸ë¥¼ ê¸°ëŠ¥ì„ ë„£ì–´ì„œ determineí•´ì•¼í•¨.
 				return _num_users_entered - _num_users_exited;
 			}
 
-			bool	tcp_server_handler::is_running()  // ¼­¹ö¿¡ ¿¬°áµÈ »óÅÂÀÎÁö È®ÀÎ.
+			bool	tcp_server_handler::is_running()  // ì„œë²„ì— ì—°ê²°ëœ ìƒíƒœì¸ì§€ í™•ì¸.
 			{
 				return _is_running;
 			}

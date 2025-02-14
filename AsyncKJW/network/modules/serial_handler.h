@@ -3,15 +3,15 @@ namespace II
 {
 	namespace network
 	{
+
 		namespace modules
 		{
 			class serial_handler :
 				public	std::enable_shared_from_this< serial_handler >
 			{
 			private:
-				static	serial_handler*				_this; //셀프 포인터
-				II::thread_pool						_pool; //스레드 풀
-				//std::vector<std::thread>			_threads;
+				static	serial_handler* _this; //셀프 포인터
+				std::vector<std::thread> workers;
 			public:
 				using receive_callback = std::function<void(short interface_id_, unsigned char* buffer, int size_)>; //콜백 함수 타입
 
@@ -32,7 +32,6 @@ namespace II
 				void send_message(short interface_id_, unsigned char* buffer_, int size_); // 데이터 송신
 				void register_callback(receive_callback callback_) { _receive_callback = callback_; } // 콜백 함수 등록
 
-				//unsigned char _outbound_packet[100] = {}; // 송신용 데이터
 				// 수신용 데이터
 				std::deque<std::pair<unsigned char*, int>> _outbound_q; // 데이터 송신용 queue 
 				std::deque<std::pair<unsigned char*, int>> _inbound_q; // 데이터 수신용 queue
