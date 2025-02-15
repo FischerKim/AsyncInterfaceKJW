@@ -770,7 +770,7 @@ namespace II
 				{
 					std::cerr << "[TCP Server] Read Error: " << e.what() << std::endl;
 				}
-				std::this_thread::sleep_for(std::chrono::milliseconds(5));
+				std::this_thread::sleep_for(std::chrono::milliseconds(10));
 			}
 
 			void	tcp_server_handler::write() // 송신
@@ -906,11 +906,11 @@ namespace II
 							{
 								if (WSAGetLastError())// == WSAENOTCONN)
 								{
-									std::cout << "Client ID: " << it->first << " Disconnected. Total: " << _exited_client.size() <<std::endl;
+									_exited_client.insert(it->first);
+									std::cout << "Client ID: " << it->first << " Disconnected." << std::endl;// Total: " << _exited_client.size() << std::endl;
 									//_is_running = false;
 									//closesocket(it->second._socket);
 									//_num_users_exited++;
-									_exited_client.insert(it->first);
 									//;
 									/*auto it_to_erase = it;
 									_client_socket.erase(it_to_erase);*/
@@ -921,7 +921,7 @@ namespace II
 #else
 #endif       
 							++it;
-							std::this_thread::sleep_for(std::chrono::milliseconds(5));
+							std::this_thread::sleep_for(std::chrono::milliseconds(1));
 						}
 
 						delete[] signed_buffer;
