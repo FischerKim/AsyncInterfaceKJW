@@ -18,6 +18,7 @@
 #include <memory>
 #include <map>
 #include <vector>
+#include <set>
 #include <thread>
 #include <fstream>
 #include <sstream>

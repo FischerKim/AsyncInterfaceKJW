@@ -8,7 +8,7 @@ namespace II
 		namespace modules
 		{
 			//tcp_server_handler* tcp_server_handler::_this = nullptr;
-			 
+
 			//socket -> bind -> listen -> accept -> send/recv
 			tcp_server_handler::tcp_server_handler() // 생성자
 			{
@@ -84,7 +84,7 @@ namespace II
 			}
 
 			// server fd Non-Blocking Socket으로 설정. Edge Trigger 사용하기 위해 설정.
-			int tcp_server_handler::set_nonblocking(int fd) 
+			int tcp_server_handler::set_nonblocking(int fd)
 			{
 #ifndef LINUX
 #else
@@ -144,7 +144,7 @@ namespace II
 				}
 #else
 				_server_socket = socket(AF_INET, SOCK_STREAM, 0);
-				if (_server_socket == -1) 
+				if (_server_socket == -1)
 				{
 					std::cerr << "[TCP Server] Error when creating a socket" << std::endl;
 					perror("socket");
@@ -152,7 +152,7 @@ namespace II
 				}
 
 				// Set the socket to be non-blocking
-				if (set_nonblocking(_server_socket) == -1) 
+				if (set_nonblocking(_server_socket) == -1)
 				{
 					perror("set_nonblocking");
 					close(_server_socket);
@@ -248,29 +248,33 @@ namespace II
 							DWORD error = GetLastError();
 							std::cerr << "GetQueuedCompletionStatus failed with error: " << error << std::endl;
 
-							if (error == ERROR_NETNAME_DELETED) {
-								std::cout << "Client disconnected." << std::endl;
+							if (error == ERROR_NETNAME_DELETED)
+							{
+								std::shared_lock<std::shared_mutex> lock(_contexts_mutex);
+								std::cout << "IOCP: Client disconnected." << std::endl;
 
-								// Clean up the client socket and resources
-								closesocket((SOCKET)completionKey);
+								//closesocket((SOCKET)completionKey);
 								std::map<int, client_context>::iterator it = _client_socket.begin();
 								while (it != _client_socket.end())
 								{
+									int socketState;
+									int socketStateLen = sizeof(socketState);
+									if (getsockopt(it->second._socket, SOL_SOCKET, SO_ERROR, (char*)&socketState, &socketStateLen) < 0) {
+										std::cerr << "client socket is closed." << WSAGetLastError() << std::endl;
+										closesocket(it->second._socket);
+										_client_socket.erase(it);
 
-									u_long nonBlocking = 0;
-									int isvalid = ioctlsocket(it->second._socket, FIONBIO, &nonBlocking);
-									if (isvalid == SOCKET_ERROR) {
-										std::cerr << it->first << " Socket is not valid: " << WSAGetLastError() << std::endl;
-										auto it_to_erase = it;
-										_client_socket.erase(it_to_erase); 
 										_num_users_exited++;
-										++it;
+										//_exited_client.insert(it->first);
 										continue;
-									}								
-									++it;
+									}
+									else
+									{
+										++it;
+									}
 								}
-								delete ioData;
 							}
+							delete ioData;
 							continue;
 						}
 						if (ioData == nullptr) {
@@ -360,7 +364,7 @@ namespace II
 							}
 
 							delete ioData;
-							this->read(); // read 함수 자체는 루프에서 빠지고 iocp가 나중에 콜하기 때문에 stackoverflow 위험은 없음.
+							this->read();// read 함수 자체는 루프에서 빠지고 iocp가 나중에 콜하기 때문에 stackoverflow 위험은 없음.
 						}
 						//Overlapped I/O Send
 						else if (ioData->operationType == OP_WRITE)
@@ -399,12 +403,12 @@ namespace II
 						EPOLLET : 엣지 트리거 방식으로 설정(기본은 레벨 트리거 방식) 
 						EPOLLONESHOT : 한번만 이벤트 받음 
 						*/
-						for(int i = 0; i < nfds; i++)
+						for (int i = 0; i < nfds; i++)
 						{
 							if (events[i].data.fd == _server_socket)
 							{
 								this->accept_connection();
-								std::this_thread::sleep_for(std::chrono::milliseconds(100));					
+								std::this_thread::sleep_for(std::chrono::milliseconds(100));
 							}
 							else //if client socket has event.
 							{
@@ -412,7 +416,7 @@ namespace II
 								{
 									this->read();
 								}
-								if (events[i].events & EPOLLOUT) 
+								if (events[i].events & EPOLLOUT)
 								{
 									this->write();
 								}
@@ -481,7 +485,7 @@ namespace II
 
 				try
 				{
-					std::unique_lock<std::mutex> lock(_contexts_mutex);
+					std::shared_lock<std::shared_mutex> lock(_contexts_mutex);
 					_is_running = false;
 					std::cout << "[TCP Server]: Stopping..." << std::endl;
 
@@ -587,8 +591,8 @@ namespace II
 						oclient._id = _num_users_entered;
 						oclient._socket = client_socket;
 #ifndef LINUX
-						int recvTimeout = 0;
-						if (setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&recvTimeout, sizeof(recvTimeout)) == SOCKET_ERROR) {
+						int recvTimeout_ms = 10;
+						if (setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&recvTimeout_ms, sizeof(recvTimeout_ms)) == SOCKET_ERROR) {
 							std::cerr << "[TCP Server]: setsockopt(SO_RCVTIMEO) failed: " << WSAGetLastError() << std::endl;
 						}
 						CreateIoCompletionPort((HANDLE)oclient._socket, _iocp, (ULONG_PTR)&oclient._socket, 0); // does not require locking
@@ -597,7 +601,7 @@ namespace II
 						set_nonblocking(client_socket);
 						struct timeval recvTimeout;
 						recvTimeout.tv_sec = 0;
-						recvTimeout.tv_usec = 0;  // 5 ms
+						recvTimeout.tv_usec = 10;  // 5 ms
 						if (setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, &recvTimeout, sizeof(recvTimeout)) < 0) {
 							std::cerr << "[TCP Server]: setsockopt(SO_RCVTIMEO) failed: " << strerror(errno) << std::endl;
 						}
@@ -715,10 +719,11 @@ namespace II
 						accept_connection();
 					}
 
-					//std::unique_lock<std::mutex> lock(_contexts_mutex);
+					//
 					std::map<int, client_context>::iterator it = _client_socket.begin();
 					while (it != _client_socket.end()) // it is guranteed to be read since client socket will always be more than 1.
 					{
+						std::shared_lock<std::shared_mutex> lock(_contexts_mutex);
 						//	std::cout << "server: read called" << std::endl;
 #ifndef LINUX
 						PER_IO_DATA* readData = new PER_IO_DATA{};
@@ -772,6 +777,7 @@ namespace II
 			{
 				try
 				{
+					std::shared_lock<std::shared_mutex> lock(_contexts_mutex);
 					/*if (_connected == false)
 					{
 						std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -780,8 +786,7 @@ namespace II
 
 					if (!_newly_added_client_socket.empty())
 					{
-						std::unique_lock<std::mutex> client_lock(_contexts_mutex);
-						
+
 						_client_socket.insert(
 							std::make_move_iterator(_newly_added_client_socket.begin()),
 							std::make_move_iterator(_newly_added_client_socket.end())
@@ -811,6 +816,8 @@ namespace II
 #endif
 					}
 
+
+
 					unsigned char* unsigned_buffer = nullptr;
 					int size = 0;
 					if (!_outbound_q.empty())
@@ -824,14 +831,19 @@ namespace II
 					}
 					if (size > 0)
 					{
-						//std::unique_lock<std::mutex> lock(_contexts_mutex);
 						char* signed_buffer = new char[size];
 						memset(signed_buffer, 0, size);
 						memcpy(signed_buffer, unsigned_buffer, size);
 						std::map<int, client_context>::iterator it = _client_socket.begin();
 						while (it != _client_socket.end())
 						{
+							if (_exited_client.end() != _exited_client.find(it->first))
+							{
+								++it;
+								continue;
+							}
 #ifndef LINUX
+
 							PER_IO_DATA* writeData = new PER_IO_DATA{};
 
 							writeData->operationType = OP_WRITE;
@@ -844,17 +856,17 @@ namespace II
 							DWORD flags = 0;
 
 							//--------------------
-							socket_address_type client_addr;
+						/*	socket_address_type client_addr;
 							int client_addr_len = sizeof(client_addr);
 							getpeername(it->second._socket, (socket_address_type2*)&client_addr, &client_addr_len);
 
 							int port = ntohs(client_addr.sin_port);
 							std::string address = inet_ntoa(client_addr.sin_addr);
 
-							/*	std::cout << " Writing to-> Client ID: " << it->first << " Client IP: " << address
+								std::cout << " Writing to-> Client ID: " << it->first << " Client IP: " << address
 									<< " Port: " << std::to_string(port) << std::endl;*/
 
-							
+
 
 							int ret = WSASend(
 								it->second._socket,
@@ -868,7 +880,7 @@ namespace II
 							//if (signed_buffer != nullptr && size > 0) ret = WSASend(it->second._socket, signed_buffer, size, 0); //blocking call
 #else
 							ssize_t written = send(it->second._socket, signed_buffer, size, 0);
-							if (written == -1) 
+							if (written == -1)
 							{
 								perror("send");
 								close(it->second._socket);
@@ -882,10 +894,10 @@ namespace II
 							//struct epoll_event ev;
 							ev.events = EPOLLOUT | EPOLLET;
 							ev.data.fd = it->second._socket;
-							if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, it->second._socket, &ev) == -1) 
+							if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, it->second._socket, &ev) == -1)
 							{
 								perror("epoll_ctl: mod it->second._socket");
-								close(it->second._socket); 
+								close(it->second._socket);
 							}
 #endif
 
@@ -894,14 +906,15 @@ namespace II
 							{
 								if (WSAGetLastError())// == WSAENOTCONN)
 								{
-									std::cout << "Disconnected" << std::endl;
-									_is_running = false;
-									//closesocket(*it);
+									std::cout << "Client ID: " << it->first << " Disconnected. Total: " << _exited_client.size() <<std::endl;
+									//_is_running = false;
 									//closesocket(it->second._socket);
 									//_num_users_exited++;
+									_exited_client.insert(it->first);
+									//;
+									/*auto it_to_erase = it;
+									_client_socket.erase(it_to_erase);*/
 								}
-								/*auto it_to_erase = it;
-								_client_socket.erase(it_to_erase);*/
 								++it;
 								continue;
 							}

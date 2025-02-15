@@ -79,6 +79,7 @@ namespace II
 				};
 				std::map<int, client_context> _client_socket;
 				std::map<int, client_context> _newly_added_client_socket;
+				std::set<int> _exited_client;
 
 				void on_read(unsigned char* received_text_, int size_); // 데이터 수신시 불려지는 함수.
 				void read(); // 수신
@@ -88,7 +89,7 @@ namespace II
 
 				std::mutex _read_mutex; // 수신용 queue에 대한 mutex
 				std::mutex _write_mutex; // 송신용 queue에 대한 mutex 
-				std::mutex _contexts_mutex;
+				std::shared_mutex _contexts_mutex;
 				bool _print_to_console = true; // 콘솔에 프린트를 할 것인지 여부
 				bool _is_running = false; // 현재 통신이 시작되었는지 여부
 				bool _connected = false; // 현재 통신이 시작되었는지 여부
