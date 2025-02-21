@@ -3,15 +3,14 @@
 
 namespace II
 {
-	//클라이언트는 iocp가 필요 없음.
 	namespace network
 	{
 		namespace modules
 		{
 			//tcp_client_handler* tcp_client_handler::_this = nullptr;
-			 
+
 			//socket -> connect -> send/recv
-			tcp_client_handler::tcp_client_handler() //: _pool(4)  // 생성자
+			tcp_client_handler::tcp_client_handler()  // 생성자
 			{
 				//_this = this;
 			}
@@ -40,8 +39,8 @@ namespace II
 				{
 					if (t.joinable()) {
 						t.join();
-			}
-		}
+					}
+				}
 			}
 
 			void tcp_client_handler::set_info(const session_info& info_) //설정
@@ -68,6 +67,7 @@ namespace II
 				int flags = fcntl(fd, F_GETFL, 0);
 				if (flags == -1)
 				{
+					std::cout << "[TCP Client] setting non block returned -1" << std::endl;
 					return -1;
 				}
 				return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
@@ -80,7 +80,6 @@ namespace II
 				try
 				{
 					std::unique_lock<std::mutex> lock(_read_mutex);
-
 					_inbound_q.emplace_back(buffer_, size_);
 				}
 				catch (const std::exception& e)
@@ -100,12 +99,13 @@ namespace II
 				std::printf("     L [IFC]    + SERVER PORT : %d\n", _tcp_info._destination_port);
 #ifndef LINUX
 				_iocp = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0);
-				CreateIoCompletionPort((HANDLE)_client_socket, _iocp, (ULONG_PTR)_client_socket, 0); //4 넣어도 됨
+				//	CreateIoCompletionPort((HANDLE)_client_socket, _iocp, (ULONG_PTR)_client_socket, 0); //4 넣어도 됨
 #else
 #endif
 				std::thread connect_thread([this]() {
-					while (!_connected)
+					while (true)
 					{
+						if (_connected) break;
 						this->attempt_to_connect(); // connected 되면 read 부름
 						std::this_thread::sleep_for(std::chrono::milliseconds(100));
 					}
@@ -138,16 +138,16 @@ namespace II
 								// Clean up the client socket and resources
 								closesocket((SOCKET)completionKey);
 								delete ioData;
+								ioData = nullptr;
 							}
-							continue;
 						}
 						if (ioData == nullptr) {
 							std::cerr << "[TCP Client] Null overlapped structure!" << std::endl;
-							continue;  // Avoid dereferencing
+							break;  // Avoid dereferencing
 						}
 						if (ioData->operationType == OP_READ)
 						{
-						//	std::cout << "[TCP Client] read IOCP Called.." << std::endl;
+							//	std::cout << "[TCP Client] read IOCP Called.." << std::endl;
 							if (bytes_transferred > 0)
 							{
 								unsigned char* received_data_unsigned = new unsigned char[bytes_transferred];
@@ -180,7 +180,7 @@ namespace II
 						}
 						else if (ioData->operationType == OP_WRITE)
 						{
-						//	std::cout << "[TCP Client] write IOCP Called.." << std::endl;
+							//	std::cout << "[TCP Client] write IOCP Called.." << std::endl;
 
 							delete ioData;
 							//this->read();
@@ -206,10 +206,11 @@ namespace II
 						int nfds = epoll_wait(epoll_fd, events, MAX_EVENTS, -1); //-1이면 waiting time inifinite
 						if (nfds == -1)
 						{
+							std::cout << "[TCP Client] epoll_wait error" << std::endl;
 							perror("epoll_wait");
 							close(_client_socket);
 							close(epoll_fd);
-							return false;
+							return;
 						}
 						/*
 						EPOLLIN : 수신할 데이터가 있다. 
@@ -226,13 +227,15 @@ namespace II
 							{
 								this->read();
 							}
-							if (events[i].events & EPOLLOUT)
+							/*if (events[i].events & EPOLLOUT)
 							{
 								this->write();
-							}
+							}*/
 						}
 					}
 					});
+
+				workers.emplace_back(std::move(epoll_thread));
 
 #endif
 
@@ -244,35 +247,31 @@ namespace II
 							std::unique_lock<std::mutex> lock(_read_mutex);
 
 							auto& front = _inbound_q.front();
-							unsigned char* buffer = front.first;
+							/*unsigned char* buffer = front.first;
 							int size = front.second;
-							_inbound_q.pop_front();
+							_inbound_q.pop_front();*/
 
-							std::string alphanumeric_text;
+							/*std::string alphanumeric_text;
 							for (int i = 0; i < size; ++i)
 							{
 								if (std::isalnum(buffer[i])) alphanumeric_text += buffer[i];
 							}
-							if (_print_to_console) std::cout << "[TCP Client] Received: " << alphanumeric_text << " Size: " << size << std::endl;
+							if (_print_to_console) std::cout << "[TCP Client] Received: " << alphanumeric_text << " Size: " << size << std::endl;*/
+
+							std::cout << "[TCP Client] Received Data Size: " << front.second << std::endl;
 #ifndef LINUX
-							if (_receive_callback != NULL) _receive_callback(_tcp_info._id, std::move(buffer), size);
+							if (_receive_callback != NULL) _receive_callback(_tcp_info._id, front.first, front.second);
 #else
-							if (_receive_callback != nullptr) _receive_callback(_tcp_info._id, std::move(buffer), size);
+							if (_receive_callback != nullptr) _receive_callback(_tcp_info._id, front.first, front.second);
 #endif	
+							delete[] front.first;
+							front.first = nullptr;
+							_inbound_q.pop_front();
 						}
-						std::this_thread::sleep_for(std::chrono::milliseconds(5));
+						//std::this_thread::sleep_for(std::chrono::milliseconds(5));
 					}
 					});
 				workers.emplace_back(std::move(callback_thread));
-
-				//std::thread read_thread([this]() {
-				//	while (true)
-				//	{
-				//		read();
-				//	}
-				//	});
-
-				//workers.emplace_back(std::move(read_thread));
 
 
 				std::thread write_thread([this]() {
@@ -299,9 +298,27 @@ namespace II
 					if (_client_socket == NULL) return true;
 
 #ifndef LINUX
+
+					for (auto& t : workers)
+					{
+						PostQueuedCompletionStatus(_iocp, 0, 0, NULL);
+					}
+
+					for (auto& t : workers)
+					{
+						if (t.joinable()) {
+							t.join();
+						}
+					}
 					if (_client_socket != NULL) shutdown(_client_socket, SD_BOTH);
 					closesocket(_client_socket);
 #else
+					for (auto& t : workers)
+					{
+						if (t.joinable()) {
+							t.join();
+						}
+					}
 					if (_client_socket >= 0) shutdown(_client_socket, SHUT_RDWR);
 					close(_client_socket);
 #endif
@@ -331,7 +348,7 @@ namespace II
 					std::unique_lock<std::mutex> lock(_write_mutex);
 
 					//1024 바이트 이상일 경우 나눠서 송신 
-					int num_chunks = size_ / 1024;
+					/*int num_chunks = size_ / 1024;
 					int remaining_bytes = size_ % 1024;
 					for (int i = 0; i < num_chunks; ++i)
 					{
@@ -347,7 +364,12 @@ namespace II
 						memset(last_chunk, 0, remaining_bytes);
 						memcpy(last_chunk, buffer_ + (num_chunks * 1024), remaining_bytes);
 						_outbound_q.emplace_back(std::move(last_chunk), remaining_bytes);
-					}
+					}*/
+
+					unsigned char* last_chunk = new unsigned char[size_];
+					memset(last_chunk, 0, size_);
+					memcpy(last_chunk, buffer_, size_);
+					_outbound_q.emplace_back(std::move(last_chunk), size_);
 				}
 				catch (const std::exception& e)
 				{
@@ -357,118 +379,165 @@ namespace II
 
 			void	tcp_client_handler::attempt_to_connect()
 			{
-				std::unique_lock<std::mutex> lock(_contexts_mutex);
-				int i = 0;
-				for (; i < strlen((char*)_tcp_info._destination_ip); i++)
+				try
 				{
-					if (_tcp_info._destination_ip[i] == ' ')
-						break;
-				}
-				_tcp_info._destination_ip[i] = '\0';
-#ifndef LINUX
-				WSADATA wsaData;
-				if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0)
-				{
-					std::cerr << "[TCP Client] Error when initializing Winsock" << std::endl;
-
-					return;
-				}
-
-				_client_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-				socket_address_type client_address;
-				client_address.sin_family = AF_INET;
-				client_address.sin_addr.s_addr = INADDR_ANY;
-				client_address.sin_port = htons(_tcp_info._source_port);
-				if (bind(_client_socket, (socket_address_type2*)&client_address, sizeof(client_address)) == socket_error_type)
-				{
-					std::cerr << "[TCP Client] Error when binding a socket to a specified address" << std::endl;
-					closesocket(_client_socket);
-
-					return;
-				}
-				if (_client_socket == -1)
-				{
-					std::cerr << "[TCP Client] Error when creating a socket" << std::endl;
-
-					return;
-				}
-#else
-				_client_socket = socket(AF_INET, SOCK_STREAM, 0);
-				if (_client_socket == -1)
-				{
-					std::cerr << "[TCP Server] Error when creating a socket" << std::endl;
-					perror("socket");
-					return;
-				}
-				// Set the socket to be non-blocking
-				if (set_nonblocking(_client_socket) == -1)
-				{
-					perror("set_nonblocking");
-					close(_client_socket);
-					return;
-				}
-
-				socket_address_type client_address;
-				client_address.sin_family = AF_INET;
-				client_address.sin_addr.s_addr = INADDR_ANY;
-				client_address.sin_port = htons(_tcp_info._source_port);
-				if (bind(_client_socket, (socket_address_type2*)&client_address, sizeof(client_address)) == -1)
-				{
-					std::cerr << "[TCP Client] Error when binding a socket to a specified address" << std::endl;
-					close(_client_socket);
-					return;
-				}
-				if (_client_socket == -1) 
-				{
-					std::cerr << "[TCP Client] Error when creating a socket" << std::endl;
-					close(_client_socket);
-					return;
-				}
-#endif
-
-				socket_address_type server_address;
-				server_address.sin_family = AF_INET;
-				server_address.sin_port = htons(_tcp_info._destination_port);
-				inet_pton(AF_INET, _tcp_info._destination_ip, &server_address.sin_addr);
-				int result = connect(_client_socket, (socket_address_type2*)&server_address, sizeof(server_address));
-
-				if (result == -1)
-				{
-					std::cerr << "[TCP Client]: Error when connecting to the server" << std::endl;
-					std::cout << "[TCP Client]: Trying again to connect to the server " << _tcp_info._destination_ip << std::endl;
-#ifndef LINUX
-					shutdown(_client_socket, SD_BOTH);  // SD_BOTH is generally more clear than '2'
-					closesocket(_client_socket);        // Ensure socket handle is freed
-					_client_socket = NULL;              // Prevent accidental reuse
-					Sleep(1000);
-#else
-					close(_client_socket);
-					_client_socket = -1;
-					sleep(1000);
-#endif
-
-					return;
-				}
-				else
-				{
-#ifndef LINUX
-					int recvTimeout = 0; 
-					if (setsockopt(_client_socket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&recvTimeout, sizeof(recvTimeout)) == SOCKET_ERROR) {
-						std::cerr << "[TCP Client]: setsockopt(SO_RCVTIMEO) failed: " << WSAGetLastError() << std::endl;
-					}
-					CreateIoCompletionPort((HANDLE)_client_socket, _iocp, (ULONG_PTR)&_client_socket, 0);
-
-					socket_address_type actual_address;
-					int addrlen = sizeof(actual_address);
-#else
-					socket_address_type actual_address;
-					socklen_t addrlen = sizeof(actual_address);
-#endif
-					if (getpeername(_client_socket, (socket_address_type2*)&actual_address, &addrlen) == 0)
+					std::shared_lock<_sharedmutex> lock(_contexts_mutex);
+					int i = 0;
+					for (; i < strlen((char*)_tcp_info._destination_ip); i++)
 					{
-						if (ntohs(actual_address.sin_port) != _tcp_info._destination_port)
+						if (_tcp_info._destination_ip[i] == ' ')
+							break;
+					}
+					_tcp_info._destination_ip[i] = '\0';
+#ifndef LINUX
+					WSADATA wsaData;
+					if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0)
+					{
+						std::cerr << "[TCP Client] Error when initializing Winsock" << std::endl;
+						return;
+					}
+
+					_client_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+					socket_address_type client_address;
+					client_address.sin_family = AF_INET;
+					client_address.sin_addr.s_addr = INADDR_ANY;
+					client_address.sin_port = htons(_tcp_info._source_port);
+					if (bind(_client_socket, (socket_address_type2*)&client_address, sizeof(client_address)) == socket_error_type)
+					{
+						std::cerr << "[TCP Client] Error when binding a socket to a specified address" << std::endl;
+						closesocket(_client_socket);
+						return;
+					}
+					//if (_client_socket == -1)
+					//{
+					//	std::cerr << "[TCP Client] Error when creating a socket" << std::endl;
+
+					//	return;
+					//}
+#else
+					_client_socket = socket(AF_INET, SOCK_STREAM, 0);
+					if (_client_socket == -1)
+					{
+						std::cerr << "[TCP Server] Error when creating a socket" << std::endl;
+						perror("socket");
+						return;
+					}
+					// Set the socket to be non-blocking 이걸 여기서 셋팅하면 connect가 안됨
+				/*	if (set_nonblocking(_client_socket) == -1)
+					{
+						perror("set_nonblocking");
+						close(_client_socket);
+						return;
+					}*/
+
+					socket_address_type client_address;
+					client_address.sin_family = AF_INET;
+					client_address.sin_addr.s_addr = INADDR_ANY;
+					client_address.sin_port = htons(_tcp_info._source_port);
+
+					if (bind(_client_socket, (socket_address_type2*)&client_address, sizeof(client_address)) == -1)
+					{
+						std::cerr << "[TCP Client] Error when binding a socket to a specified address port:" << _tcp_info._source_port << std::endl;
+						close(_client_socket);
+						_client_socket = -1;
+						sleep(1);
+						return;
+					}
+					/*if (_client_socket == -1)
+					{
+						std::cerr << "[TCP Client] Error when creating a socket" << std::endl;
+						close(_client_socket);
+						return;
+					}*/
+#endif
+
+					socket_address_type server_address;
+					server_address.sin_family = AF_INET;
+					server_address.sin_port = htons(_tcp_info._destination_port);
+					inet_pton(AF_INET, _tcp_info._destination_ip, &server_address.sin_addr);
+					int result = connect(_client_socket, (socket_address_type2*)&server_address, sizeof(server_address));
+
+					if (result == -1)
+					{
+						std::cerr << "[TCP Client]: Error when connecting to the server" << std::endl;
+						std::cout << "[TCP Client]: Trying again to connect to the server " << _tcp_info._destination_ip << ":" << _tcp_info._destination_port << std::endl;
+#ifndef LINUX
+						shutdown(_client_socket, SD_BOTH);  // SD_BOTH is generally more clear than '2'
+						closesocket(_client_socket);        // Ensure socket handle is freed
+						_client_socket = NULL;              // Prevent accidental reuse
+						Sleep(1000);
+#else
+						close(_client_socket);
+						_client_socket = -1;
+						sleep(1);
+#endif
+
+						return;
+					}
+					else
+					{
+#ifndef LINUX
+						int recvTimeout = 0;
+						if (setsockopt(_client_socket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&recvTimeout, sizeof(recvTimeout)) == SOCKET_ERROR) {
+							std::cerr << "[TCP Client]: setsockopt(SO_RCVTIMEO) failed: " << WSAGetLastError() << std::endl;
+						}
+						CreateIoCompletionPort((HANDLE)_client_socket, _iocp, (ULONG_PTR)&_client_socket, 0);
+
+						socket_address_type actual_address;
+						int addrlen = sizeof(actual_address);
+#else
+						socket_address_type actual_address;
+						socklen_t addrlen = sizeof(actual_address);
+#endif
+						if (getpeername(_client_socket, (socket_address_type2*)&actual_address, &addrlen) == 0)
 						{
-							std::cerr << "Error: Connected to a different port!" << std::endl;
+							if (ntohs(actual_address.sin_port) != _tcp_info._destination_port)
+							{
+								std::cerr << "Error: Connected to a different port!" << std::endl;
+#ifndef LINUX
+								closesocket(_client_socket);
+#else
+								close(_client_socket);
+#endif
+								result = socket_error_type;
+
+								return;
+							}
+							else
+							{
+#ifndef LINUX
+#else
+								epoll_fd = epoll_create1(0);
+								if (epoll_fd == -1)
+								{
+									perror("epoll_create1");
+									close(_client_socket);
+									return;
+								}
+
+								// Add the listening socket to the epoll instance
+								ev.events = EPOLLIN | EPOLLET;
+								ev.data.fd = _client_socket; //이 fd를 통해 앞으로 epoll에 등록된 fd들을 조작함.
+								if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, _client_socket, &ev) == -1) //epoll에 fd 등록
+								{
+									perror("epoll_ctl: _client_socket");
+									close(_client_socket);
+									close(epoll_fd);
+									return;
+								}
+
+#endif
+								std::cout << "[TCP Client]: Connected to the server " << std::endl;
+								_connected = true;
+								//Start receiving when connected--------
+								read();
+
+								return;
+							}
+						}
+						else
+						{
+							std::cerr << "Error getting peer name." << std::endl;
 #ifndef LINUX
 							closesocket(_client_socket);
 #else
@@ -478,29 +547,15 @@ namespace II
 
 							return;
 						}
-						else
-						{
-							std::cout << "[TCP Client]: Connected to the server " << std::endl;
-							_connected = true;
-							//Start receiving when connected--------
-							read();
-
-							return;
-						}
-					}
-					else
-					{
-						std::cerr << "Error getting peer name." << std::endl;
-#ifndef LINUX
-						closesocket(_client_socket);
-#else
-						close(_client_socket);
-#endif
-						result = socket_error_type;
-
-						return;
 					}
 				}
+				catch (const std::exception& e) {
+					std::cerr << "Exception caught: " << e.what() << std::endl;
+				}
+				catch (...) {
+					std::cerr << "Unknown exception caught" << std::endl;
+				}
+
 			}
 
 			void	tcp_client_handler::read()  // 수신
@@ -513,7 +568,7 @@ namespace II
 				try
 				{
 					//std::cout << "client: read called" << std::endl;
-					//std::unique_lock<std::mutex> lock(_contexts_mutex);
+					std::shared_lock<_sharedmutex> lock(_contexts_mutex);
 #ifndef LINUX
 					PER_IO_DATA* readData = new PER_IO_DATA{};
 					readData->operationType = OP_READ;
@@ -548,7 +603,7 @@ namespace II
 						memset(received_data_unsigned, 0, sizeof(received_data_unsigned));
 						std::memcpy(received_data_unsigned, buffer, bytes_transferred);
 						this->on_read(std::move(received_data_unsigned), bytes_transferred);
-						delete[] buffer;
+						//delete[] buffer;
 					}
 #endif
 				}
@@ -556,7 +611,7 @@ namespace II
 				{
 					std::cerr << "[TCP Client] Read Error: " << e.what() << std::endl;
 				}
-				std::this_thread::sleep_for(std::chrono::milliseconds(5));
+				//std::this_thread::sleep_for(std::chrono::milliseconds(5));
 			}
 
 			void	tcp_client_handler::write() // 송신
@@ -568,7 +623,7 @@ namespace II
 				}
 				try
 				{
-					//std::unique_lock<std::mutex> lock(_contexts_mutex);
+					std::shared_lock<_sharedmutex> lock(_contexts_mutex);
 
 					unsigned char* unsigned_buffer = nullptr;
 					int size = 0;
@@ -614,22 +669,22 @@ namespace II
 						);
 #else
 						ssize_t written = send(_client_socket, signed_buffer, size, 0);
-						if (written == -1) 
+						if (written == -1)
 						{
 							perror("send");
 							close(_client_socket);
 							return;
 						}
 
-						// Re-arm the EPOLLOUT event for this client
-						//struct epoll_event ev;
-						ev.events = EPOLLOUT | EPOLLET;
-						ev.data.fd = _client_socket;
-						if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, _client_socket, &ev) == -1)
-						{
-							perror("epoll_ctl: mod _client_socket");
-							close(_client_socket);
-						}
+						//// Re-arm the EPOLLOUT event for this client
+						////struct epoll_event ev;
+						//ev.events = EPOLLOUT | EPOLLET;
+						//ev.data.fd = _client_socket;
+						//if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, _client_socket, &ev) == -1)
+						//{
+						//	perror("epoll_ctl: mod _client_socket");
+						//	close(_client_socket);
+						//}
 #endif
 
 #ifndef LINUX
@@ -637,7 +692,7 @@ namespace II
 						{
 							if (WSAGetLastError())
 							{
-								std::cout << "Disconnected" << std::endl;
+								std::cout << "[TCP Client] Disconnected" << std::endl;
 								_is_running = false;
 								closesocket(_client_socket);
 							}
@@ -645,7 +700,7 @@ namespace II
 #else
 						if (errno)
 						{
-							std::cout << "Disconnected" << std::endl;
+							std::cout << "[TCP Client] Disconnected" << std::endl;
 							_is_running = false;
 							close(_client_socket);
 						}
@@ -666,12 +721,12 @@ namespace II
 						}
 #endif
 					}
-					std::this_thread::sleep_for(std::chrono::milliseconds(10));
 				}
 				catch (const std::exception& e)
 				{
 					std::cerr << "[TCP Client] Write Error: " << e.what() << std::endl;
 				}
+				std::this_thread::sleep_for(std::chrono::milliseconds(1));
 			}
 
 			bool	tcp_client_handler::is_running()  // 서버에 연결된 상태인지 확인.

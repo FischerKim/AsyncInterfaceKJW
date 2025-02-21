@@ -91,6 +91,7 @@ namespace II
 				int flags = fcntl(fd, F_GETFL, 0);
 				if (flags == -1)
 				{
+					std::cout << "[TCP Server] setting non block returned -1" << std::endl;
 					return -1;
 				}
 				return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
@@ -103,10 +104,6 @@ namespace II
 				try
 				{
 					std::unique_lock<std::mutex> lock(_read_mutex);
-
-					//unsigned char* message_copy = new unsigned char[size_]; 
-					//memset(message_copy, 0, size_);
-					//memcpy(message_copy, buffer_, size_);
 					_inbound_q.emplace_back(buffer_, size_);
 				}
 				catch (const std::exception& e)
@@ -250,7 +247,7 @@ namespace II
 
 							if (error == ERROR_NETNAME_DELETED)
 							{
-								std::shared_lock<std::shared_mutex> lock(_contexts_mutex);
+								std::shared_lock<_sharedmutex> lock(_contexts_mutex);
 								std::cout << "IOCP: Client disconnected." << std::endl;
 
 								//closesocket((SOCKET)completionKey);
@@ -375,7 +372,7 @@ namespace II
 						}
 						else
 						{
-							std::cout << "undefined operation" << std::endl;
+							std::cout << "[TCP Server] undefined operation" << std::endl;
 						}
 						//std::this_thread::sleep_for(std::chrono::milliseconds(5));
 					}
@@ -389,11 +386,14 @@ namespace II
 						int nfds = epoll_wait(epoll_fd, events, MAX_EVENTS, -1); //-1이면 waiting time inifinite
 						if (nfds == -1)
 						{
+							std::cout << "[TCP Server] epoll_wait error" << std::endl;
 							perror("epoll_wait");
 							close(_server_socket);
 							close(epoll_fd);
 							return false;
 						}
+
+						
 						/*
 						EPOLLIN : 수신할 데이터가 있다. 
 						EPOLLOUT : 송신 가능하다. 
@@ -414,12 +414,13 @@ namespace II
 							{
 								if (events[i].events & EPOLLIN)
 								{
+									//std::cout << "asdf" << std::endl;
 									this->read();
 								}
-								if (events[i].events & EPOLLOUT)
+								/*if (events[i].events & EPOLLOUT)
 								{
 									this->write();
-								}
+								}*/
 							}
 						}
 					}
@@ -436,23 +437,28 @@ namespace II
 							std::unique_lock<std::mutex> lock(_read_mutex);
 
 							auto& front = _inbound_q.front();
-							unsigned char* buffer = front.first;
+						/*	unsigned char* buffer = front.first;
 							int size = front.second;
-							_inbound_q.pop_front();
+							_inbound_q.pop_front();*/
 
-							std::string alphanumeric_text;
-							for (int i = 0; i < size; ++i)
-							{
-								if (std::isalnum(buffer[i])) alphanumeric_text += buffer[i];
-							}
-							if (_print_to_console) std::cout << "[TCP Server] Received: " << alphanumeric_text << " Size: " << size << std::endl;
+							//std::string alphanumeric_text;
+							//for (int i = 0; i < size; ++i)
+							//{
+							//	if (std::isalnum(buffer[i])) alphanumeric_text += buffer[i];
+							//}
+							//if (_print_to_console) std::cout << "[TCP Server] Received: " << alphanumeric_text << " Size: " << size << std::endl;
+
+							std::cout << "[TCP Server] Received Data Size: " << front.second << std::endl;
 #ifndef LINUX
-							if (_receive_callback != NULL) _receive_callback(_tcp_info._id, std::move(buffer), size);
+							if (_receive_callback != NULL) _receive_callback(_tcp_info._id, front.first, front.second);
 #else
-							if (_receive_callback != nullptr) _receive_callback(_tcp_info._id, std::move(buffer), size);
+							if (_receive_callback != nullptr) _receive_callback(_tcp_info._id, front.first, front.second);
 #endif	
+							delete[] front.first;
+							front.first = nullptr;
+							_inbound_q.pop_front();
 						}
-						std::this_thread::sleep_for(std::chrono::milliseconds(5));
+						//std::this_thread::sleep_for(std::chrono::milliseconds(5));
 					}
 					});
 
@@ -485,14 +491,26 @@ namespace II
 
 				try
 				{
-					std::shared_lock<std::shared_mutex> lock(_contexts_mutex);
 					_is_running = false;
+#ifndef LINUX
+					for (auto& t : workers)
+					{
+						PostQueuedCompletionStatus(_iocp, 0, 0, NULL);
+					}
+#endif
+					for (auto& t : workers)
+					{
+						if (t.joinable()) {
+							t.join();
+						}
+					}
 					std::cout << "[TCP Server]: Stopping..." << std::endl;
 
 					if (_server_socket == NULL) return true;
 #ifndef LINUX
 					for (auto& client : _client_socket)
 					{
+					    shutdown(client.second._socket, SD_BOTH);
 						closesocket(client.second._socket);
 					}
 #else
@@ -524,7 +542,7 @@ namespace II
 					for (auto& t : workers)
 					{
 						if (t.joinable()) {
-							t.join(); //join이 될수 없음 waiting time 이 infinite라
+							t.join(); 
 						}
 					}
 					std::cout << "[TCP Server]: Stopped " << std::endl;
@@ -544,26 +562,31 @@ namespace II
 				try
 				{
 					//std::cout << "server send called" << std::endl;
-					std::unique_lock<std::mutex>lock(_write_mutex);
+					std::unique_lock<std::mutex> lock(_write_mutex);
 
-					//1024 바이트 이상일 경우 나눠서 송신 
-					int num_chunks = size_ / 1024;
-					int remaining_bytes = size_ % 1024;
-					for (int i = 0; i < num_chunks; ++i)
-					{
-						unsigned char* chunk = new unsigned char[1024];
-						memset(chunk, 0, 1024);
-						memcpy(chunk, buffer_ + (i * 1024), 1024);
-						_outbound_q.emplace_back(std::move(chunk), 1024);
-					}
+					////1024 바이트 이상일 경우 나눠서 송신 
+					//int num_chunks = size_ / 1024;
+					//int remaining_bytes = size_ % 1024;
+					//for (int i = 0; i < num_chunks; ++i)
+					//{
+					//	unsigned char* chunk = new unsigned char[1024];
+					//	memset(chunk, 0, 1024);
+					//	memcpy(chunk, buffer_ + (i * 1024), 1024);
+					//	_outbound_q.emplace_back(std::move(chunk), 1024);
+					//}
 
-					if (remaining_bytes > 0)
-					{
-						unsigned char* last_chunk = new unsigned char[remaining_bytes];
-						memset(last_chunk, 0, remaining_bytes);
-						memcpy(last_chunk, buffer_ + (num_chunks * 1024), remaining_bytes);
-						_outbound_q.emplace_back(std::move(last_chunk), remaining_bytes);
-					}
+					//if (remaining_bytes > 0)
+					//{
+					//	unsigned char* last_chunk = new unsigned char[remaining_bytes];
+					//	memset(last_chunk, 0, remaining_bytes);
+					//	memcpy(last_chunk, buffer_ + (num_chunks * 1024), remaining_bytes);
+					//	_outbound_q.emplace_back(std::move(last_chunk), remaining_bytes);
+					//}
+
+					unsigned char* last_chunk = new unsigned char[size_];
+					memset(last_chunk, 0, size_);
+					memcpy(last_chunk, buffer_, size_);
+					_outbound_q.emplace_back(std::move(last_chunk), size_);
 				}
 				catch (const std::exception& e)
 				{
@@ -582,11 +605,12 @@ namespace II
 #endif
 					if (client_socket == -1)
 					{
-						std::cerr << "[TCP Server]: Error when accepting an incoming connection" << std::endl;
+						//std::cerr << "[TCP Server]: Error when accepting an incoming connection" << std::endl;
+						return false;
 					}
 					else //if accepted
 					{
-						//std::unique_lock<std::mutex> lock(_contexts_mutex);
+						//std::unique_lock<std::mutex> lock(_contexts_mutex); 버퍼가 달라서 구지 안해도 됨
 						client_context oclient;
 						oclient._id = _num_users_entered;
 						oclient._socket = client_socket;
@@ -596,12 +620,11 @@ namespace II
 							std::cerr << "[TCP Server]: setsockopt(SO_RCVTIMEO) failed: " << WSAGetLastError() << std::endl;
 						}
 						CreateIoCompletionPort((HANDLE)oclient._socket, _iocp, (ULONG_PTR)&oclient._socket, 0); // does not require locking
-						_newly_added_client_socket.insert(std::make_pair(_num_users_entered, std::move(oclient)));
 #else
 						set_nonblocking(client_socket);
 						struct timeval recvTimeout;
 						recvTimeout.tv_sec = 0;
-						recvTimeout.tv_usec = 10;  // 5 ms
+						recvTimeout.tv_usec = 10000;  // microsec
 						if (setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, &recvTimeout, sizeof(recvTimeout)) < 0) {
 							std::cerr << "[TCP Server]: setsockopt(SO_RCVTIMEO) failed: " << strerror(errno) << std::endl;
 						}
@@ -615,11 +638,14 @@ namespace II
 							close(epoll_fd);
 							return false;
 						}
-#endif
-
+#endif						
+						_newly_added_client_socket.insert(std::make_pair(_num_users_entered, std::move(oclient)));
 						socket_address_type client_addr;
 #ifndef LINUX
 						int client_addr_len = sizeof(client_addr);
+#else
+						socklen_t client_addr_len = sizeof(client_addr);
+#endif
 						getpeername(client_socket, (socket_address_type2*)&client_addr, &client_addr_len);
 
 						int port = ntohs(client_addr.sin_port);
@@ -627,9 +653,7 @@ namespace II
 
 						std::cout << " [IFC]  TCP Server : Accepted a Client IP: " << address
 							<< " Port: " << std::to_string(port) << std::endl;
-#else
-						socklen_t client_addr_len = sizeof(client_addr);
-#endif
+
 						write(); //왜냐면 여기서 새로 들어온 클라를 확인함.
 						read();
 
@@ -723,7 +747,7 @@ namespace II
 					std::map<int, client_context>::iterator it = _client_socket.begin();
 					while (it != _client_socket.end()) // it is guranteed to be read since client socket will always be more than 1.
 					{
-						std::shared_lock<std::shared_mutex> lock(_contexts_mutex);
+						std::shared_lock<_sharedmutex> lock(_contexts_mutex);
 						//	std::cout << "server: read called" << std::endl;
 #ifndef LINUX
 						PER_IO_DATA* readData = new PER_IO_DATA{};
@@ -750,6 +774,7 @@ namespace II
 							delete readData;
 						}
 #else
+					//	std::cout << "attempting to read" << std::endl;
 						char buffer[BUFFER_SIZE];
 						ssize_t bytes_transferred = recv(it->second._socket, buffer, sizeof(buffer), 0);
 
@@ -759,7 +784,7 @@ namespace II
 							memset(received_data_unsigned, 0, sizeof(received_data_unsigned));
 							std::memcpy(received_data_unsigned, buffer, bytes_transferred);
 							this->on_read(std::move(received_data_unsigned), bytes_transferred);
-							delete[] buffer;
+							//delete[] buffer;
 							//buffer = nullptr;
 						}
 #endif
@@ -770,14 +795,14 @@ namespace II
 				{
 					std::cerr << "[TCP Server] Read Error: " << e.what() << std::endl;
 				}
-				std::this_thread::sleep_for(std::chrono::milliseconds(10));
+				//std::this_thread::sleep_for(std::chrono::milliseconds(10));
 			}
 
 			void	tcp_server_handler::write() // 송신
 			{
 				try
 				{
-					std::shared_lock<std::shared_mutex> lock(_contexts_mutex);
+					std::shared_lock<_sharedmutex> lock(_contexts_mutex);
 					/*if (_connected == false)
 					{
 						std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -786,22 +811,23 @@ namespace II
 
 					if (!_newly_added_client_socket.empty())
 					{
-
 						_client_socket.insert(
 							std::make_move_iterator(_newly_added_client_socket.begin()),
 							std::make_move_iterator(_newly_added_client_socket.end())
 						);
 						_newly_added_client_socket.clear();
 
-
-
 						std::map<int, client_context>::iterator it = _client_socket.begin();
 						std::cout << "[TCP Server] Total clients: " << _client_socket.size();
-#ifndef LINUX
+
 						while (it != _client_socket.end())
 						{
 							socket_address_type client_addr;
+#ifndef LINUX
 							int client_addr_len = sizeof(client_addr);
+#else
+							socklen_t client_addr_len = sizeof(client_addr);
+#endif
 							getpeername(it->second._socket, (socket_address_type2*)&client_addr, &client_addr_len);
 
 							int port = ntohs(client_addr.sin_port);
@@ -811,12 +837,7 @@ namespace II
 								<< " Port: " << std::to_string(port) << std::endl;
 							it++;
 						}
-#else
-
-#endif
 					}
-
-
 
 					unsigned char* unsigned_buffer = nullptr;
 					int size = 0;
@@ -866,8 +887,6 @@ namespace II
 								std::cout << " Writing to-> Client ID: " << it->first << " Client IP: " << address
 									<< " Port: " << std::to_string(port) << std::endl;*/
 
-
-
 							int ret = WSASend(
 								it->second._socket,
 								&writeData->wsaBuf,
@@ -890,15 +909,15 @@ namespace II
 								continue;
 							}
 
-							// Re-arm the EPOLLOUT event for this client
-							//struct epoll_event ev;
-							ev.events = EPOLLOUT | EPOLLET;
-							ev.data.fd = it->second._socket;
-							if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, it->second._socket, &ev) == -1)
-							{
-								perror("epoll_ctl: mod it->second._socket");
-								close(it->second._socket);
-							}
+							//// Re-arm the EPOLLOUT event for this client
+							////struct epoll_event ev;
+							//ev.events = EPOLLOUT | EPOLLET;
+							//ev.data.fd = it->second._socket;
+							//if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, it->second._socket, &ev) == -1)
+							//{
+							//	perror("epoll_ctl: mod it->second._socket");
+							//	close(it->second._socket);
+							//}
 #endif
 
 #ifndef LINUX
@@ -921,7 +940,7 @@ namespace II
 #else
 #endif       
 							++it;
-							std::this_thread::sleep_for(std::chrono::milliseconds(1));
+							//std::this_thread::sleep_for(std::chrono::milliseconds(1));
 						}
 
 						delete[] signed_buffer;
@@ -946,7 +965,7 @@ namespace II
 				{
 					std::cerr << "[TCP Server] Write Error: " << e.what() << std::endl;
 				}
-				std::this_thread::sleep_for(std::chrono::milliseconds(10));
+				std::this_thread::sleep_for(std::chrono::milliseconds(1));
 			}
 
 			int		tcp_server_handler::num_users_connected()  // 서버에 연결된 클라이언트 수.

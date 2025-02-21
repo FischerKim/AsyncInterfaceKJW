@@ -50,7 +50,7 @@ namespace II
 				std::mutex _read_mutex;  // 수신용 queue에 대한 mutex
 				std::mutex _write_mutex;  // 송신용 queue에 대한 mutex 
 				bool _first_time = true;  // 처음 데이터를 읽는지 여부
-				bool print_to_console = true;  // 콘솔에 프린트를 할 것인지 여부
+				//bool print_to_console = true;  // 콘솔에 프린트를 할 것인지 여부
 				bool _is_running = false;  // 현재 통신이 시작되었는지 여부
 			public:
 				bool is_running();

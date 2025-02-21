@@ -36,7 +36,7 @@ namespace II
 				public	std::enable_shared_from_this< tcp_server_handler >
 			{
 			private:
-				static	tcp_server_handler* _this; // 셀프 포인터
+				//static	tcp_server_handler* _this; // 셀프 포인터
 				std::vector<std::thread> workers;
 			public:
 				using receive_callback = std::function<void(short interface_id_, unsigned char* buffer, int size_)>; // 콜백 함수 타입
@@ -65,11 +65,13 @@ namespace II
 				using socket_address_type = sockaddr_in; // 소켓 주소
 				using socket_address_type2 = sockaddr; // 소켓 주소
 				int socket_error_type = SOCKET_ERROR;
+				using _sharedmutex = std::shared_mutex;
 #else
 				using socket_type = int;
 				using socket_address_type = struct sockaddr_in;
 				using socket_address_type2 = struct sockaddr;
 				int socket_error_type = SO_ERROR;
+				using _sharedmutex = std::shared_timed_mutex;
 #endif
 				socket_type _server_socket; // TCP 서버 소켓
 				struct client_context
@@ -89,8 +91,8 @@ namespace II
 
 				std::mutex _read_mutex; // 수신용 queue에 대한 mutex
 				std::mutex _write_mutex; // 송신용 queue에 대한 mutex 
-				std::shared_mutex _contexts_mutex;
-				bool _print_to_console = true; // 콘솔에 프린트를 할 것인지 여부
+				_sharedmutex _contexts_mutex;
+				//bool _print_to_console = true; // 콘솔에 프린트를 할 것인지 여부
 				bool _is_running = false; // 현재 통신이 시작되었는지 여부
 				bool _connected = false; // 현재 통신이 시작되었는지 여부
 #ifndef LINUX

@@ -9,7 +9,7 @@ namespace II
 				public	std::enable_shared_from_this< tcp_client_handler >
 			{
 			private:
-				static	tcp_client_handler* _this; //셀프 포인터
+				//static	tcp_client_handler* _this; //셀프 포인터
 				std::vector<std::thread> workers;
 			public:
 				using receive_callback = std::function<void(short interface_id_, unsigned char* buffer, int size_)>; //콜백 함수 타입
@@ -39,20 +39,22 @@ namespace II
 				using socket_address_type = sockaddr_in; //소켓 주소
 				using socket_address_type2 = sockaddr; //소켓 주소
 				int socket_error_type = SOCKET_ERROR;
+				using _sharedmutex = std::shared_mutex;
 #else
 				using socket_type = int;
 				using socket_address_type = struct sockaddr_in;
 				using socket_address_type2 = struct sockaddr;
 				int socket_error_type = SO_ERROR;
+				using _sharedmutex = std::shared_timed_mutex;
 #endif
 				std::deque<std::pair<unsigned char*, int>> _outbound_q; // 데이터 송신용 queue 
 				std::deque<std::pair<unsigned char*, int>> _inbound_q; // 데이터 수신용 queue
 				std::mutex _read_mutex;  // 수신용 queue에 대한 mutex 현재 lock은 모두 thread_pool에서 관리.
 				std::mutex _write_mutex;  // 송신용 queue에 대한 mutex 
 
-				std::mutex _contexts_mutex;
+				_sharedmutex _contexts_mutex;
 				bool _first_time = true;  // 처음 데이터를 읽는지 여부
-				bool _print_to_console = true; // 콘솔에 프린트를 할 것인지 여부
+				//bool _print_to_console = true; // 콘솔에 프린트를 할 것인지 여부
 				bool _is_running = false; // 현재 통신이 시작되었는지 여부
 				bool _connected = false; // 현재 통신이 시작되었는지 여부
 #ifndef LINUX
@@ -60,7 +62,7 @@ namespace II
 #else
 				int epoll_fd;
 				struct epoll_event ev, events[MAX_EVENTS];
-				std::condition_variable cv;;
+				std::condition_variable cv;
 #endif
 			protected:
 				socket_type  _client_socket; // TCP 클라이언트 소켓 (non-pointer approach)

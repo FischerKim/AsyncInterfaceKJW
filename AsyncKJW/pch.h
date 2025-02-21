@@ -2,11 +2,11 @@
 #ifndef SESSION_IPP
 #define SESSION_IPP
 #ifndef LINUX
-	#define WIN32_LEAN_AND_MEAN
-	#include <windows.h>
-	#include <winsock2.h>
-	#pragma comment(lib, "Ws2_32.lib")
-	#include <ws2tcpip.h>
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <winsock2.h>
+#pragma comment(lib, "Ws2_32.lib")
+#include <ws2tcpip.h>
 #else // Assuming Linux/Unix system
 #include <cstdint>
 #include <sys/types.h>
@@ -16,9 +16,9 @@
 #include <sys/epoll.h>
 #endif 
 #include <memory>
+#include <set>
 #include <map>
 #include <vector>
-#include <set>
 #include <thread>
 #include <fstream>
 #include <sstream>
@@ -50,7 +50,6 @@
 #include <unistd.h> // write(), read(), close()
 #endif
 #include <common/type.h>
-//#include <common/usertypedef.h>
 #include <network/module_info.h>
 #include <network/modules/udp_handler.h>
 #include <network/modules/tcp_client_handler.h>

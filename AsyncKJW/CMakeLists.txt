@@ -4,7 +4,7 @@ if(MSVC)
     set(CMAKE_SYSTEM_VERSION 10.0 CACHE STRING "" FORCE)
 endif()
 
-project(NWIntegratedInterface CXX)
+project(AsyncKJW CXX)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -14,7 +14,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 if(NOT CMAKE_VS_PLATFORM_NAME)
     set(CMAKE_VS_PLATFORM_NAME "x64")
 endif()
-message("${CMAKE_VS_PLATFORM_NAME} architecture in use [NWIntegratedInterface]")
+message("${CMAKE_VS_PLATFORM_NAME} architecture in use [AsyncKJW]")
 
 if(NOT ("${CMAKE_VS_PLATFORM_NAME}" STREQUAL "x64"
      OR "${CMAKE_VS_PLATFORM_NAME}" STREQUAL "x86"))
@@ -86,7 +86,7 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 ################################################################################
 # Sub-projects
 ################################################################################
-set(PROJECT_NAME NWIntegratedInterface)
+set(PROJECT_NAME AsyncKJW)
 
 ################################################################################
 # Source groups
@@ -105,8 +105,8 @@ set(config
 source_group("config" FILES ${config})
 
 set(main
-    "main/NWIntegratedInterface.cpp"
-    "main/NWIntegratedInterface.h"
+    "main/AsyncKJW.cpp"
+    "main/AsyncKJW.h"
     "main/session.hpp"
     "main/session.ipp"
 )
@@ -156,7 +156,7 @@ target_precompile_headers(${PROJECT_NAME} PRIVATE
 )
 
 use_props(${PROJECT_NAME} "${CMAKE_CONFIGURATION_TYPES}" "${DEFAULT_CXX_PROPS}")
-set(ROOT_NAMESPACE NWIntegratedInterface)
+set(ROOT_NAMESPACE AsyncKJW)
 
 if(MSVC)
     set_target_properties(${PROJECT_NAME} PROPERTIES
@@ -216,7 +216,7 @@ if(MSVC)
             "$<$<CONFIG:Release>:"
                 "NDEBUG"
             ">"
-            "NWINTEGRATEDINTERFACE_EXPORTS;"
+            "ASYNCKJW_EXPORTS;"
             "_WINDOWS;"
             "_USRDLL;"
             "_CRT_SECURE_NO_WARNINGS;"
@@ -233,7 +233,7 @@ if(MSVC)
                 "NDEBUG"
             ">"
             "WIN32;"
-            "NWINTEGRATEDINTERFACE_EXPORTS;"
+            "ASYNCKJW_EXPORTS;"
             "_WINDOWS;"
             "_USRDLL;"
             "UNICODE;"
@@ -250,7 +250,7 @@ else()
             "NDEBUG"
         ">"
         "LINUX;"
-        "NWINTEGRATEDINTERFACE_EXPORTS;"
+        "ASYNCKJW_EXPORTS;"
         "_LINUX;"
         "_USRDLL;"
         "UNICODE;"
