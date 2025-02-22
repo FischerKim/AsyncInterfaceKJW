@@ -7,6 +7,7 @@
 #include <winsock2.h>
 #pragma comment(lib, "Ws2_32.lib")
 #include <ws2tcpip.h>
+#include <MSWSock.h>
 #else // Assuming Linux/Unix system
 #include <cstdint>
 #include <sys/types.h>

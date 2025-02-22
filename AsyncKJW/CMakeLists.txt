@@ -92,8 +92,6 @@ set(PROJECT_NAME AsyncKJW)
 # Source groups
 ################################################################################
 set(common    
-    "common/thread_pool.cpp"
-    "common/thread_pool.h"
     "common/type.h"
 )
 source_group("common" FILES ${common})
@@ -133,7 +131,6 @@ set(project
     "dllmain.cpp"
     "pch.cpp"
     "pch.h"
-    "resource.h"
 )
 source_group("project" FILES ${project})
 

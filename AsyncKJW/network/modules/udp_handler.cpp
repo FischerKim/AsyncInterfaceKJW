@@ -1,6 +1,5 @@
 ﻿#pragma once
 #include <pch.h>
-#include <MSWSock.h>
 
 namespace II
 {
