@@ -23,7 +23,15 @@ namespace II
 		try
 		{
 			m_strConfigFilePath[0] = '\0';
-			strcpy(m_strConfigFilePath, ("Config/KDDX_SIM_" + EQUIPMENT_NAME[i_ushEquipNo] + ".ini").c_str());
+			if (i_ushEquipNo == 100)
+			{
+				const char* default_ini = "Config/default.ini";
+				strcpy(m_strConfigFilePath, default_ini);
+			}
+			else
+			{
+				strcpy(m_strConfigFilePath, ("Config/KDDX_SIM_" + EQUIPMENT_NAME[i_ushEquipNo] + ".ini").c_str());
+			}
 			cout << "LOAD CONFIG FILE : " << m_strConfigFilePath << endl;
 		}
 		catch (const exception& e)

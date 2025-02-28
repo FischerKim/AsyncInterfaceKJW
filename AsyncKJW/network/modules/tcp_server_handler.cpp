@@ -458,7 +458,7 @@ namespace II
 							front.first = nullptr;
 							_inbound_q.pop_front();
 						}
-						//std::this_thread::sleep_for(std::chrono::milliseconds(5));
+						std::this_thread::sleep_for(std::chrono::milliseconds(1));
 					}
 					});
 
