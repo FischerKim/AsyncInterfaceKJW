@@ -58,8 +58,7 @@ namespace II
             // Ethernet
             char		    _source_ip[16]; // 송신자 IP
             unsigned int    _source_port; // 송신자 포트
-            char		    _destination_ip[16]; // 수신자 IP
-            unsigned int	_destination_port; // 수신자 포트
+            std::map<std::string, unsigned int> _destinations;
 
             // Serial
             char		    _serial_port[10]; // 시리얼 포트
@@ -68,17 +67,10 @@ namespace II
             char		    _stop_bits[15]; // stop bits
             char		    _parity_mode[10]; // parity mode
 
-            session_info() // 통신 모듈 생성자
-                : _id(0),
-                _type(0),
-                _source_port(0),
-                _destination_port(0),
-                _baud_rate(0),
-                _data_width(0)
+            session_info() : _id(0), _type(0), _source_port(0), _baud_rate(0), _data_width(0)
             {
                 std::fill(std::begin(_description), std::end(_description), 0);
                 std::fill(std::begin(_source_ip), std::end(_source_ip), 0);
-                std::fill(std::begin(_destination_ip), std::end(_destination_ip), 0);
                 std::fill(std::begin(_serial_port), std::end(_serial_port), 0);
                 std::fill(std::begin(_stop_bits), std::end(_stop_bits), 0);
                 std::fill(std::begin(_parity_mode), std::end(_parity_mode), 0);
@@ -131,13 +123,15 @@ namespace II
             unsigned int        _max_tx_msg_count;
             unsigned int        _max_tx_msg_length;
             unsigned int        _max_rx_msg_length;
-            unsigned int        _type;
+            unsigned int        _unicast_or_multicast;
 
             char                _name[16];
             char                _source_ip[16];
             unsigned int        _source_port;
-            char                _destination_ip[16];
-            unsigned int        _destination_port;
+
+            std::map<std::string, unsigned int> _destinations;
+           /* char                _destination_ip[16];
+            unsigned int        _destination_port;*/
             unsigned int        _ttl;
 
             udp_info() // 생성자
@@ -150,12 +144,12 @@ namespace II
                 _max_tx_msg_length(UDP_MAX_TX_MSGLEN),
                 _max_rx_msg_length(UDP_MAX_RX_MSGLEN),
                 _source_port(0),
-                _destination_port(0),
+               // _destination_port(0),
                 _ttl(1)
             {
                 std::fill(std::begin(_name), std::end(_name), 0);
                 std::fill(std::begin(_source_ip), std::end(_source_ip), 0);
-                std::fill(std::begin(_destination_ip), std::end(_destination_ip), 0);
+               // std::fill(std::begin(_destination_ip), std::end(_destination_ip), 0);
             }
         };
 

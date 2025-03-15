@@ -38,7 +38,7 @@ namespace II
 
 	char* AsyncKJW::get_version()	// II 클래스: 버젼 가지고 오기
 	{
-		static char version[] = II_VERSION;
+		static char version[10] = II_VERSION;
 		return version;
 	}
 
@@ -103,7 +103,12 @@ namespace II
 		{
 			std::vector<II::network::session_info> info_;
 			info_.clear();
-			pImpl->m_config_manager.load_from_file(info_, pImpl->_equipment_number);
+
+			// Load main config and optional UDP runtime file
+			pImpl->m_config_manager.load_ini(info_, "Config/II.ini", "Config/udp_runtime.ini");
+			// Load only main config
+			/*pImpl->m_config_manager.load_ini(info_, "Config/II.ini");
+			pImpl->m_config_manager.load_ini(info_, pImpl->_equipment_number);*/
 			close();
 			//std::unique_lock<std::mutex> lock(m_lock);
 			printf("  [II] ------------ Load Sessions ---------------\n");
@@ -117,35 +122,35 @@ namespace II
 					printf("  [II] Session ID =  %d\n", info._id);
 					switch (info._type) 
 					{
-					case E_INTERFACE_TYPE::_UDP_UNICAST:
+					case E_INTERFACE_TYPE::TYPE_UDP_UNICAST:
 					{
 						std::shared_ptr<session<II::network::modules::udp_handler>> S_ =
 							std::make_shared<session<II::network::modules::udp_handler>>(info);
 						pImpl->m_map_udp.insert({ info._id, std::move(S_) });
 					}
 					break;
-					case E_INTERFACE_TYPE::_UDP_MULTICAST:
+					case E_INTERFACE_TYPE::TYPE_UDP_MULTICAST:
 					{
 						std::shared_ptr<session<II::network::modules::udp_handler>> S_ =
 							std::make_shared<session<II::network::modules::udp_handler>>(info);
 						pImpl->m_map_udp.insert({ info._id, std::move(S_) });
 					}
 					break;
-					case E_INTERFACE_TYPE::_TCP_SERVER:
+					case E_INTERFACE_TYPE::TYPE_TCP_SERVER:
 					{
 						std::shared_ptr<session<II::network::modules::tcp_server_handler>> S_ =
 							std::make_shared<session<II::network::modules::tcp_server_handler>>(info);
 						pImpl->m_map_tcp_server.insert({ info._id, std::move(S_) });
 					}
 					break;
-					case E_INTERFACE_TYPE::_TCP_CLIENT:
+					case E_INTERFACE_TYPE::TYPE_TCP_CLIENT:
 					{
 						std::shared_ptr<session<II::network::modules::tcp_client_handler>> S_ =
 							std::make_shared<session<II::network::modules::tcp_client_handler>>(info);
 						pImpl->m_map_tcp_client.insert({ info._id, std::move(S_) });
 					}
 					break;
-					case _SERIAL:
+					case TYPE_SERIAL:
 					{
 						std::shared_ptr<session<II::network::modules::serial_handler>> S_ =
 							std::make_shared<session<II::network::modules::serial_handler>>(info);
@@ -171,8 +176,6 @@ namespace II
 	{
 		try
 		{
-			if (source_id_ == ALL_INTERFACE)
-			{
 				if (pImpl->m_map_udp.size() > 0)
 				{
 					for (std::pair<short, std::shared_ptr<session<II::network::modules::udp_handler>>> iter : pImpl->m_map_udp)
@@ -201,30 +204,6 @@ namespace II
 						iter.second->start();
 					}
 				}
-			}
-			else
-			{
-				auto iter_udp = pImpl->m_map_udp.find(source_id_);
-				if (iter_udp != pImpl->m_map_udp.end())
-				{
-					iter_udp->second->start();
-				}
-				auto iter_tcp_server = pImpl->m_map_tcp_server.find(source_id_);
-				if (iter_tcp_server != pImpl->m_map_tcp_server.end())
-				{
-					iter_tcp_server->second->start();
-				}
-				auto iter_tcp_client = pImpl->m_map_tcp_client.find(source_id_);
-				if (iter_tcp_client != pImpl->m_map_tcp_client.end())
-				{
-					iter_tcp_client->second->start();
-				}
-				auto iter_serial = pImpl->m_map_serial.find(source_id_);
-				if (iter_serial != pImpl->m_map_serial.end())
-				{
-					iter_serial->second->start();
-				}
-			}
 		}
 		catch (std::exception ex)
 		{
@@ -326,34 +305,31 @@ namespace II
 	{
 		try
 		{
-			if (source_id_ > ALL_INTERFACE)
-			{
-				int nSendStatus = -1;
-				//map<short, boost::shared_ptr<session<II::network::modules::udp_handler>>>::iterator iter = m_map_udp.find(interface_id_);
+			int nSendStatus = -1;
+			//map<short, boost::shared_ptr<session<II::network::modules::udp_handler>>>::iterator iter = m_map_udp.find(interface_id_);
 
-				auto iter_udp = pImpl->m_map_udp.find(source_id_);
-				if (iter_udp != pImpl->m_map_udp.end())
-				{
-					iter_udp->second->send(destination_id_, buffer_, size_);
-				}
-				auto iter_tcp_server = pImpl->m_map_tcp_server.find(source_id_);
-				if (iter_tcp_server != pImpl->m_map_tcp_server.end())
-				{
-					iter_tcp_server->second->send(destination_id_, buffer_, size_);
-				}
-				auto iter_tcp_client = pImpl->m_map_tcp_client.find(source_id_);
-				if (iter_tcp_client != pImpl->m_map_tcp_client.end())
-				{
-					iter_tcp_client->second->send(destination_id_, buffer_, size_);
-				}
-				auto iter_serial = pImpl->m_map_serial.find(source_id_);
-				if (iter_serial != pImpl->m_map_serial.end())
-				{
-					iter_serial->second->send(destination_id_, buffer_, size_);
-				}
-				printf("  [II] WriteData : ID : %d, DATA : %s, DataSIZE : %d\n",
-					source_id_, buffer_, size_);
+			auto iter_udp = pImpl->m_map_udp.find(source_id_);
+			if (iter_udp != pImpl->m_map_udp.end())
+			{
+				iter_udp->second->send(destination_id_, buffer_, size_);
 			}
+			auto iter_tcp_server = pImpl->m_map_tcp_server.find(source_id_);
+			if (iter_tcp_server != pImpl->m_map_tcp_server.end())
+			{
+				iter_tcp_server->second->send(destination_id_, buffer_, size_);
+			}
+			auto iter_tcp_client = pImpl->m_map_tcp_client.find(source_id_);
+			if (iter_tcp_client != pImpl->m_map_tcp_client.end())
+			{
+				iter_tcp_client->second->send(destination_id_, buffer_, size_);
+			}
+			auto iter_serial = pImpl->m_map_serial.find(source_id_);
+			if (iter_serial != pImpl->m_map_serial.end())
+			{
+				iter_serial->second->send(destination_id_, buffer_, size_);
+			}
+			printf("  [II] WriteData : ID : %d, DATA : %s, DataSIZE : %d\n",
+				source_id_, buffer_, size_);
 		}
 		catch (std::exception ex)
 		{
@@ -498,12 +474,12 @@ namespace II
 	}
 
 #pragma region API FUNCTION
-	extern "C" EXPORT_CLASS AsyncKJW* CreateAsyncKJW(unsigned short equipment_number_) // II API 함수: II 객체 생성
+	extern "C" EXPORT_CLASS AsyncKJW* API_Create(unsigned short equipment_number_) // II API 함수: II 객체 생성
 	{
 		return new AsyncKJW(equipment_number_);
 	}
 
-	extern "C" EXPORT_CLASS void DestroyAsyncKJW(AsyncKJW* instance_) // II API 함수: II 객체 파괴
+	extern "C" EXPORT_CLASS void API_Destroy(AsyncKJW* instance_) // II API 함수: II 객체 파괴
 	{
 		if (instance_) 
 		{

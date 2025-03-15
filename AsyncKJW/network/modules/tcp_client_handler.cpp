@@ -51,8 +51,11 @@ namespace II
 					strcpy(_tcp_info._source_ip, info_._source_ip);
 					_tcp_info._source_port = info_._source_port;
 
-					strcpy(_tcp_info._destination_ip, info_._destination_ip);
-					_tcp_info._destination_port = info_._destination_port;
+
+					std::strncpy(_tcp_info._destination_ip, info_._destinations.begin()->first.c_str(), sizeof(_tcp_info._destination_ip) - 1);
+					_tcp_info._destination_port = info_._destinations.begin()->second;
+					//strcpy(_tcp_info._destination_ip, info_._destination_ip);
+					//_tcp_info._destination_port = info_._destination_port;
 				}
 				catch (const std::exception& e)
 				{

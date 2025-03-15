@@ -37,8 +37,8 @@ namespace II
 	extern "C" 
 	{
 		// C-style exported functions for C# or non-C++ users
-		EXPORT_CLASS AsyncKJW* CreateAsyncKJW(unsigned short equipment_number_); // II API 함수: II 객체 생성
-		EXPORT_CLASS void DestroyAsyncKJW(AsyncKJW* instance_); // II API 함수: II 객체 파괴
+		EXPORT_CLASS AsyncKJW* API_Create(unsigned short equipment_number_); // II API 함수: II 객체 생성
+		EXPORT_CLASS void API_Destroy(AsyncKJW* instance_); // II API 함수: II 객체 파괴
 		EXPORT_CLASS char* API_get_version(AsyncKJW* instance_); // II API 함수: 버젼 가지고 오기
 		EXPORT_CLASS char* API_get_running_statuses(AsyncKJW* instance_, int* out_size); // 모든 II 통신 모듈 상태 불러오기
 		EXPORT_CLASS void API_load(AsyncKJW* instance_); // II API 함수: 설정 불러오기

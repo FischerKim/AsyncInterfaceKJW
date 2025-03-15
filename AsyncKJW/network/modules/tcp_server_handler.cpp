@@ -74,8 +74,8 @@ namespace II
 					strcpy(_tcp_info._source_ip, info_._source_ip);
 					_tcp_info._source_port = info_._source_port;
 
-					strcpy(_tcp_info._destination_ip, info_._destination_ip);
-					_tcp_info._destination_port = info_._destination_port;
+					//strcpy(_tcp_info._destination_ip, info_._destination_ip);
+					//_tcp_info._destination_port = info_._destination_port;
 				}
 				catch (const std::exception& e)
 				{

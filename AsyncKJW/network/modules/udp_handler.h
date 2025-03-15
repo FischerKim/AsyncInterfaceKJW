@@ -66,7 +66,8 @@ namespace II
 #endif
 			protected:
 				socket_type _udp_socket;  // UDP 家南 (non-pointer approach)
-				socket_address_type _source_address, _destination_address; // 林家
+				socket_address_type _source_address; // 林家
+				std::vector< socket_address_type> _destination_address_list;
 				struct ip_mreq _mreq;
 				int _bytes_transferred = -1;
 			public:

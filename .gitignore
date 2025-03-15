@@ -1,1 +1,29 @@
 AsyncKJW/.vs/
+# Ignore Visual Studio specific files
+.vscode/
+*.suo
+*.user
+*.ncb
+*.sdf
+*.opensdf
+*.cache
+*.VC.db
+*.VC.opendb
+
+# Ignore build artifacts
+*.obj
+*.pch
+*.idb
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.log
+
+# Ignore dependency caches
+*.tlog
+*.lastbuildstate
+*.manifest
+*.iobj
+*.ipdb
+*.rsp
