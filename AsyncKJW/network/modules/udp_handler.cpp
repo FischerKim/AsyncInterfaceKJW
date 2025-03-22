@@ -46,14 +46,13 @@ namespace II
 				try
 				{
 					_udp_info._id = info_._id;
-					strcpy(_udp_info._source_ip, info_._source_ip);
-					_udp_info._source_port = info_._source_port;
-
-					_udp_info._destinations = info_._destinations;
-
+					strcpy(_udp_info._source_ip, info_._udp_source_ip);
+					_udp_info._source_port = info_._udp_source_port;
 
 					/*strcpy(_udp_info._destination_ip, info_._destination_ip);
 					_udp_info._destination_port = info_._destination_port;*/
+					_udp_info._destinations = info_._udp_destinations;
+
 					_udp_info._unicast_or_multicast = info_._type;
 				}
 				catch (const std::exception& e)
@@ -90,6 +89,26 @@ namespace II
 				}
 			}
 
+			void udp_handler::print_ip_as_hex(const char* ip)
+			{
+				std::printf("      IP Address in Hex: ");
+				for (int i = 0; i < strlen(ip); ++i)
+				{
+					std::printf("%02x ", (unsigned char)ip[i]);
+				}
+				std::printf("\n");
+			}
+
+			std::string udp_handler::clean_ip(const std::string& ip)
+			{
+				std::string cleaned_ip = ip;
+				cleaned_ip.erase(std::find_if(cleaned_ip.rbegin(), cleaned_ip.rend(), [](unsigned char ch)
+					{
+						return !std::isspace(ch) && ch != '\r' && ch != '\n';
+					}).base(), cleaned_ip.end());
+				return cleaned_ip;
+			}
+
 			bool udp_handler::start() // 시작
 			{
 				if (_is_running) return false;;
@@ -99,26 +118,30 @@ namespace II
 				std::printf("     L [IFC]  UDP CONNECT : %s\n", _udp_info._name);
 				std::printf("     L [IFC]    + SRC IP : %s\n", _udp_info._source_ip);
 				std::printf("     L [IFC]    + SRC PORT : %d\n", _udp_info._source_port);
-				for(auto & dest : _udp_info._destinations)
+				for (auto& dest : _udp_info._destinations)
 				{
-					std::printf("     L [IFC]    + DST IP : %s\n", dest.first.c_str());
-					std::printf("     L [IFC]    + DST PORT : %d\n", dest.second);
+					std::printf("     L [IFC]    + DST ID : %d\n", dest.first);
+					std::printf("     L [IFC]    + DST IP : %s\n", dest.second.first.c_str());
+					std::printf("     L [IFC]    + DST PORT : %d\n", dest.second.second);
 				}
-			/*	std::printf("     L [IFC]    + DST IP : %s\n", _udp_info._destination_ip);
-				std::printf("     L [IFC]    + DST PORT : %d\n", _udp_info._destination_port);*/
 				std::printf("     L [IFC]    + TYPE : %s\n", &type[0]);
 #ifndef LINUX
 				_iocp = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0);
-				//CreateIoCompletionPort((HANDLE)_udp_socket, _iocp, (ULONG_PTR)_udp_socket, 0); //4 넣어도 됨
 #else
 #endif
+				_udp_info._source_ip[15] = '\0'; // Ensure null-termination
+
 				int i = 0;
 				for (; i < strlen((char*)_udp_info._source_ip); i++)
 				{
-					if (_udp_info._source_ip[i] == ' ') break;
+					if (_udp_info._source_ip[i] == ' ' || _udp_info._source_ip[i] == '\r' || _udp_info._source_ip[i] == '\n') {
+						_udp_info._source_ip[i] = '\0';
+						break;
+					}
 				}
-				_udp_info._source_ip[i] = '\0';
-				i = 0;
+
+				print_ip_as_hex(_udp_info._source_ip);  // Print the IP address as hex to check for hidden characters
+
 				/*for (; i < strlen((char*)_udp_info._destination_ip); i++)
 				{
 					if (_udp_info._destination_ip[i] == ' ') break;
@@ -166,16 +189,13 @@ namespace II
 					std::cerr << "WSAIoctl failed with error: " << WSAGetLastError() << std::endl;
 				}
 #else
-
 				int enable = 1;
 				if (setsockopt(_udp_socket, SOL_IP, IP_RECVERR, &enable, sizeof(enable)) < 0) {
 					std::cerr << "setsockopt failed with error: " << strerror(errno) << std::endl;
 					close(_udp_socket);
 					return false;
 				}
-
 #endif
-
 				int optval = 1;
 				if (setsockopt(_udp_socket, SOL_SOCKET, SO_REUSEADDR, (const char*)&optval, sizeof(optval)) == -1) {
 					std::cerr << "Failed to set SO_REUSEADDR option" << std::endl;
@@ -190,7 +210,6 @@ namespace II
 					return false;
 				}
 #else
-
 				int flags = fcntl(_udp_socket, F_GETFL, 0);
 				if (flags == -1) {
 					std::cerr << "Failed to get socket flags" << std::endl;
@@ -202,7 +221,6 @@ namespace II
 					return false;
 				}
 #endif
-
 				// Setup IP from config
 				memset(&_source_address, 0, sizeof(_source_address));
 
@@ -210,7 +228,8 @@ namespace II
 				//_server_address.sin_addr.s_addr = inet_pton(AF_INET, _udp_info._source_ip, &_server_address.sin_addr);
 				_source_address.sin_port = htons(_udp_info._source_port);
 
-				if (inet_pton(AF_INET, _udp_info._source_ip, &_source_address.sin_addr) != 1) {
+				if (inet_pton(AF_INET, _udp_info._source_ip, &_source_address.sin_addr) != 1)
+				{
 					std::cerr << "Invalid IP address format: " << _udp_info._source_ip << std::endl;
 #ifndef LINUX
 					closesocket(_udp_socket);
@@ -221,15 +240,19 @@ namespace II
 					return false;
 				}
 
-
 				for (auto& destination_info : _udp_info._destinations)
 				{
+					std::string cleaned_dst_ip = clean_ip(destination_info.second.first);
+					/*	std::printf("     L [DEBUG] Initial DST IP: %s\n", destination_info.second.first.c_str());
+						std::printf("     L [DEBUG] Cleaned DST IP: %s\n", cleaned_dst_ip.c_str());*/
+					print_ip_as_hex(cleaned_dst_ip.c_str());
+
 					socket_address_type destination_address;
 					memset(&destination_address, 0, sizeof(destination_address));
 					destination_address.sin_family = AF_INET;
-					destination_address.sin_addr.s_addr = inet_pton(AF_INET, destination_info.first.c_str(), &destination_address.sin_addr);
-					destination_address.sin_port = htons(destination_info.second);
-					if (inet_pton(AF_INET, destination_info.first.c_str(), &destination_address.sin_addr) != 1) {
+					//destination_address.sin_addr.s_addr = inet_pton(AF_INET, cleaned_dst_ip.c_str(), &destination_address.sin_addr);
+					destination_address.sin_port = htons(destination_info.second.second);
+					if (inet_pton(AF_INET, cleaned_dst_ip.c_str(), &destination_address.sin_addr) != 1) {
 						std::cerr << "Invalid destination IP address format" << std::endl;
 #ifndef LINUX
 						closesocket(_udp_socket);
@@ -239,7 +262,7 @@ namespace II
 #endif
 						continue;
 					}
-					_destination_address_list.push_back(destination_address);
+					_destination_address_list.insert({ destination_info.first, destination_address });
 				}
 
 				// Binding UDP socket with IP.
@@ -289,7 +312,7 @@ namespace II
 					std::cout << "UDP address bound. " << _udp_info._source_ip << ":" << std::to_string(_udp_info._source_port) << std::endl;
 					for (auto& destination_info : _udp_info._destinations)
 					{
-						std::cout << "Destination IP:port is: " << destination_info.first.c_str() << ":" << std::to_string(destination_info.second) << std::endl;
+						std::cout << "Destination IP:port is: " << destination_info.second.first.c_str() << ":" << std::to_string(destination_info.second.second) << std::endl;
 					}
 
 
@@ -378,7 +401,8 @@ namespace II
 										delete ioData;
 										ioData = nullptr;
 									}
-									else {
+									else
+									{
 										wchar_t* s = nullptr;
 										FormatMessageW(
 											FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
@@ -418,7 +442,7 @@ namespace II
 									if (bytes_transferred > 0)
 									{
 										unsigned char* received_data_unsigned = new unsigned char[bytes_transferred];
-										memset(received_data_unsigned, 0, sizeof(received_data_unsigned));
+										memset(received_data_unsigned, 0, bytes_transferred);
 										std::memcpy(received_data_unsigned, ioData->buffer, bytes_transferred);
 										this->on_read(std::move(received_data_unsigned), bytes_transferred);
 										delete[] ioData->buffer;
@@ -596,7 +620,7 @@ namespace II
 					unsigned char* last_chunk = new unsigned char[size_];
 					memset(last_chunk, 0, size_);
 					memcpy(last_chunk, buffer_, size_);
-					_outbound_q.emplace_back(std::move(last_chunk), size_);
+					_outbound_q.emplace_back(destination_id_, std::make_pair(std::move(last_chunk), size_));
 				}
 				catch (const std::exception& e)
 				{
@@ -617,18 +641,23 @@ namespace II
 					readData->wsaBuf.buf = readData->buffer;
 					readData->wsaBuf.len = BUFFER_SIZE;
 					//int addr_len = sizeof(_destination_address);
+					/*for (auto& destination_address : _destination_address_list)
+					{*/
+					//	socket_address_type dest_addr_copy = destination_address.second;
+					////	std::cout << "asdf " << destination_address .first << std::endl;
+					//	int addrLen = sizeof(destination_address.second);
 					DWORD flags = 0;
-					//int ret = WSARecvFrom(
-					//	_udp_socket,
-					//	&readData->wsaBuf,
-					//	1,
-					//	NULL,                   // No immediate byte count
-					//	&flags,
-					//	(socket_address_type2*)&_destination_address,
-					//	&addr_len,
-					//	&readData->overlapped,
-					//	NULL                    // No completion routine (IOCP handles it)
-					//);
+					//	int ret = WSARecvFrom(
+					//		_udp_socket,
+					//		&readData->wsaBuf,
+					//		1,
+					//		NULL,                   // No immediate byte count
+					//		&flags,
+					//		(socket_address_type2*)&dest_addr_copy,
+					//		&addrLen,
+					//		&readData->overlapped,
+					//		NULL                    // No completion routine (IOCP handles it)
+					//	);
 					int ret = WSARecv( //If you do not need the source address information, you can use WSARecv with a UDP socket.
 						_udp_socket,
 						&readData->wsaBuf,
@@ -645,6 +674,8 @@ namespace II
 						delete[] readData->buffer;
 						delete readData;
 					}
+
+					//}
 #else
 					char buffer[BUFFER_SIZE];
 					ssize_t bytes_transferred = recv(_udp_socket, buffer, sizeof(buffer), 0);
@@ -676,16 +707,29 @@ namespace II
 					{
 						std::unique_lock<std::mutex> lock(_write_mutex);
 						auto& front = _outbound_q.front();
-						unsigned char* unsigned_buffer = front.first;
-						int size = front.second;
+						unsigned char* unsigned_buffer = front.second.first;
+						int size = front.second.second;
 						_outbound_q.pop_front(); // does not free the memory pointed to, but it only removes the entry in the queue.
 						for (auto& destination_address : _destination_address_list)
 						{
+							//-1 == send to all
+							if (front.first != -1 && (front.first != destination_address.first))
+							{
+								/*	std::cout << "request ID: " << front.first << std::endl;
+									std::cout << "available ID: " << destination_address.first << std::endl;*/
+								continue;
+							}
+							if (unsigned_buffer == nullptr)
+							{
+								std::cout << "Data is empty... " << front.first << std::endl;
+								continue;
+							}
 							if (size > 0)
 							{
 								char* signed_buffer = new char[size];
 								memset(signed_buffer, 0, size);
 								memcpy(signed_buffer, unsigned_buffer, size);
+								socket_address_type dest_addr_copy = destination_address.second;
 #ifndef LINUX
 								PER_IO_DATA* writeData = new PER_IO_DATA{};
 
@@ -695,7 +739,7 @@ namespace II
 								writeData->wsaBuf.len = static_cast<ULONG>(size);
 								writeData->bytesSent = 0;
 								writeData->totalSize = static_cast<DWORD>(size);
-								int addrLen = sizeof(destination_address);
+								int addrLen = sizeof(destination_address.second);
 								fd_set writeSet;
 								FD_ZERO(&writeSet);
 								FD_SET(_udp_socket, &writeSet);
@@ -715,7 +759,7 @@ namespace II
 										1,
 										&bytesSent,          // This will be 0 for overlapped I/O
 										flags,
-										(socket_address_type2*)&destination_address,
+										(socket_address_type2*)&dest_addr_copy,
 										addrLen,
 										&writeData->overlapped,
 										NULL                 // No completion routine, as IOCP handles completion
@@ -741,7 +785,7 @@ namespace II
 									signed_buffer,
 									size,
 									0,
-									(struct sockaddr*)&destination_address,
+									(struct sockaddr*)&dest_addr_copy,
 									sizeof(destination_address)
 								);
 
@@ -765,22 +809,23 @@ namespace II
 
 								delete[] signed_buffer;
 								signed_buffer = nullptr;
-#ifndef LINUX
-								if (_CrtIsValidHeapPointer(unsigned_buffer))
-								{
-									delete[] unsigned_buffer;
-									unsigned_buffer = nullptr;
-								}
-#else
-								if (unsigned_buffer)
-								{
-									delete[] unsigned_buffer;
-									unsigned_buffer = nullptr; // Avoid dangling pointer
-								}
-#endif
+
 							}
-							//std::this_thread::sleep_for(std::chrono::milliseconds(1));
 						}
+#ifndef LINUX
+						if (_CrtIsValidHeapPointer(unsigned_buffer))
+						{
+							delete[] unsigned_buffer;
+							unsigned_buffer = nullptr;
+						}
+#else
+						if (unsigned_buffer)
+						{
+							delete[] unsigned_buffer;
+							unsigned_buffer = nullptr; // Avoid dangling pointer
+						}
+#endif
+						//std::this_thread::sleep_for(std::chrono::milliseconds(1));
 					}
 				}
 				catch (const std::exception& e)

@@ -9,14 +9,12 @@ namespace II
 	{
 	public:
 #pragma region CONSTRUCTOR & DESTRUCTOR
-		AsyncKJWImpl(unsigned short equipment_number_)  //II 구현부 생성자
-			: _equipment_number(equipment_number_) {}
+		AsyncKJWImpl() = default;  //II 구현부 생성자
 
 		~AsyncKJWImpl() = default; //II 구현부 파괴자
 #pragma endregion
 
 		config_manager m_config_manager; // 설정파일 관리 객체
-		unsigned short _equipment_number; // (ini파일 명명 규칙에 쓰이는) Equipment 타입 인덱스
 		std::map<short, std::shared_ptr<session<II::network::modules::udp_handler>>> m_map_udp; // UDP 통신모듈 객체 컨테이너
 		std::map<short, std::shared_ptr<session<II::network::modules::tcp_server_handler>>> m_map_tcp_server; // TCP 서버 통신모듈 객체 컨테이너
 		std::map<short, std::shared_ptr<session<II::network::modules::tcp_client_handler>>> m_map_tcp_client; // TCP 클라이언트 통신모듈 객체 컨테이너
@@ -24,9 +22,9 @@ namespace II
 	};
 
 #pragma region CONSTRUCTOR & DESTRUCTOR
-	AsyncKJW::AsyncKJW(unsigned short equipment_number_) // II 클래스: II 객체 생성
+	AsyncKJW::AsyncKJW() // II 클래스: II 객체 생성
 	{
-		pImpl = new AsyncKJWImpl(equipment_number_);
+		pImpl = new AsyncKJWImpl();
 	}
 
 	AsyncKJW::~AsyncKJW()  // II 클래스: II 객체 파괴
@@ -38,7 +36,7 @@ namespace II
 
 	char* AsyncKJW::get_version()	// II 클래스: 버젼 가지고 오기
 	{
-		static char version[10] = II_VERSION;
+		static char version[] = II_VERSION;
 		return version;
 	}
 
@@ -97,19 +95,21 @@ namespace II
 		return c_str;
 	}
 
-	void AsyncKJW::load() // II 클래스: 설정 불러오기
+	void AsyncKJW::load(const char* path_) // II 클래스: 설정 불러오기
 	{
 		try
 		{
 			std::vector<II::network::session_info> info_;
 			info_.clear();
+			std::string path = std::string(path_);
+			//std::string optional_path = std::string(optional_path_);
 
 			// Load main config and optional UDP runtime file
-			pImpl->m_config_manager.load_ini(info_, "Config/II.ini", "Config/udp_runtime.ini");
-			// Load only main config
-			/*pImpl->m_config_manager.load_ini(info_, "Config/II.ini");
-			pImpl->m_config_manager.load_ini(info_, pImpl->_equipment_number);*/
-			close();
+
+			pImpl->m_config_manager.load_ini(info_, path);
+			//pImpl->m_config_manager.load_ini(info_, "Config/II.ini", "Config/udp_runtime.ini");
+
+			close(); //initialize
 			//std::unique_lock<std::mutex> lock(m_lock);
 			printf("  [II] ------------ Load Sessions ---------------\n");
 
@@ -120,7 +120,8 @@ namespace II
 					if (info._id == -1) continue;
 
 					printf("  [II] Session ID =  %d\n", info._id);
-					switch (info._type) 
+
+					switch (info._type)
 					{
 					case E_INTERFACE_TYPE::TYPE_UDP_UNICAST:
 					{
@@ -176,34 +177,27 @@ namespace II
 	{
 		try
 		{
-				if (pImpl->m_map_udp.size() > 0)
-				{
-					for (std::pair<short, std::shared_ptr<session<II::network::modules::udp_handler>>> iter : pImpl->m_map_udp)
-					{
-						iter.second->start();
-					}
-				}
-				if (pImpl->m_map_tcp_server.size() > 0)
-				{
-					for (std::pair<short, std::shared_ptr<session<II::network::modules::tcp_server_handler>>> iter : pImpl->m_map_tcp_server)
-					{
-						iter.second->start();
-					}
-				}
-				if (pImpl->m_map_tcp_client.size() > 0)
-				{
-					for (std::pair<short, std::shared_ptr<session<II::network::modules::tcp_client_handler>>> iter : pImpl->m_map_tcp_client)
-					{
-						iter.second->start();
-					}
-				}
-				if (pImpl->m_map_serial.size() > 0)
-				{
-					for (std::pair<short, std::shared_ptr<session<II::network::modules::serial_handler>>> iter : pImpl->m_map_serial)
-					{
-						iter.second->start();
-					}
-				}
+			auto iter_udp = pImpl->m_map_udp.find(source_id_);
+			if (iter_udp != pImpl->m_map_udp.end())
+			{
+				iter_udp->second->start();
+			}
+			auto iter_tcp_server = pImpl->m_map_tcp_server.find(source_id_);
+			if (iter_tcp_server != pImpl->m_map_tcp_server.end())
+			{
+				iter_tcp_server->second->start();
+			}
+			auto iter_tcp_client = pImpl->m_map_tcp_client.find(source_id_);
+			if (iter_tcp_client != pImpl->m_map_tcp_client.end())
+			{
+				iter_tcp_client->second->start();
+			}
+			auto iter_serial = pImpl->m_map_serial.find(source_id_);
+			if (iter_serial != pImpl->m_map_serial.end())
+			{
+				iter_serial->second->start();
+			}
+
 		}
 		catch (std::exception ex)
 		{
@@ -338,12 +332,13 @@ namespace II
 		return size_;
 	}
 
-	void AsyncKJW::register_callback(int id_, void* callback_) // II 클래스: UDP 데이터 수신 시 불려지는 콜백함수
+	void AsyncKJW::register_callback(short id_, void* callback_) // II 클래스: UDP 데이터 수신 시 불려지는 콜백함수
 	{
 		try
 		{
-			if (!callback_) {
-				std::cerr << "Error: callback_ is null." << std::endl;
+			if (!callback_)
+			{
+				std::cerr << "[II] Error: callback_ is null." << std::endl;
 				return;
 			}
 			// Cast the void* callback to the correct function pointer type
@@ -351,10 +346,10 @@ namespace II
 
 			// Wrap the function pointer in a std::function to use it
 			std::function<void(short, unsigned char*, int)> callback = [callback_fn](short interface_id_, unsigned char* buffer, int size_)
-			{
-				// Call the original function pointer
-				callback_fn(interface_id_, buffer, size_);
-			};
+				{
+					// Call the original function pointer
+					callback_fn(interface_id_, buffer, size_);
+				};
 			bool BFound = false;
 			auto tcp_server_pair = pImpl->m_map_tcp_server.find(id_);
 			if (tcp_server_pair != pImpl->m_map_tcp_server.end())
@@ -474,14 +469,14 @@ namespace II
 	}
 
 #pragma region API FUNCTION
-	extern "C" EXPORT_CLASS AsyncKJW* API_Create(unsigned short equipment_number_) // II API 함수: II 객체 생성
+	extern "C" EXPORT_CLASS AsyncKJW* API_Create() // II API 함수: II 객체 생성
 	{
-		return new AsyncKJW(equipment_number_);
+		return new AsyncKJW();
 	}
 
 	extern "C" EXPORT_CLASS void API_Destroy(AsyncKJW* instance_) // II API 함수: II 객체 파괴
 	{
-		if (instance_) 
+		if (instance_)
 		{
 			instance_->close();
 			delete instance_;
@@ -494,14 +489,14 @@ namespace II
 		return instance_->get_version();
 	}
 
-	extern "C" EXPORT_CLASS char* API_get_running_statuses(AsyncKJW * instance_, int* out_size)
+	extern "C" EXPORT_CLASS char* API_get_running_statuses(AsyncKJW* instance_, int* out_size)
 	{
 		return instance_->get_running_statuses(out_size);
 	}
 
-	extern "C" EXPORT_CLASS void API_load(AsyncKJW * instance_) // II API 함수: 설정 불러오기
+	extern "C" EXPORT_CLASS void API_load(AsyncKJW* instance_, const char* path_)//, const char* optional_path_) // II API 함수: 설정 불러오기
 	{
-		instance_->load();
+		instance_->load(path_);// , optional_path_);
 	}
 
 	extern "C" EXPORT_CLASS bool API_start(AsyncKJW* instance_, short id_) // II API 함수: 시작
@@ -524,7 +519,7 @@ namespace II
 		return instance_->close();
 	}
 
-	extern "C" EXPORT_CLASS int API_write(AsyncKJW * instance_, short source_id_, short destination_id_, unsigned char* buffer_, int size_) // II API 함수: 데이터 전송
+	extern "C" EXPORT_CLASS int API_write(AsyncKJW* instance_, short source_id_, short destination_id_, unsigned char* buffer_, int size_) // II API 함수: 데이터 전송
 	{
 		int result = false;
 		try
@@ -544,37 +539,37 @@ namespace II
 		return result;
 	}
 
-	extern "C" EXPORT_CLASS void API_register_callback(AsyncKJW * instance_, int id_, void* callback_) // II API 함수: UDP 데이터 수신 시 불려지는 콜백함수
+	extern "C" EXPORT_CLASS void API_register_callback(AsyncKJW* instance_, short id_, void* callback_) // II API 함수: UDP 데이터 수신 시 불려지는 콜백함수
 	{
 		return instance_->register_callback(id_, callback_);
 	}
 
-	extern "C" EXPORT_CLASS bool API_is_open_serial(AsyncKJW * instance_, short id_) // II API 함수: 시리얼 포트 열려있는지 확인
+	extern "C" EXPORT_CLASS bool API_is_open_serial(AsyncKJW* instance_, short id_) // II API 함수: 시리얼 포트 열려있는지 확인
 	{
 		return instance_->is_open_serial(id_);
 	}
 
-	extern "C" EXPORT_CLASS bool API_is_connected_tcp_client(AsyncKJW * instance_, short id_) // II API 함수: TCP 클라이언트가 서버에 연결되어있는지 확인
+	extern "C" EXPORT_CLASS bool API_is_connected_tcp_client(AsyncKJW* instance_, short id_) // II API 함수: TCP 클라이언트가 서버에 연결되어있는지 확인
 	{
 		return instance_->is_connected_tcp_client(id_);
 	}
 
-	extern "C" EXPORT_CLASS int API_num_users_connected_tcp_server(AsyncKJW * instance_, short id_) // II API 함수: TCP 서버에 몇 개의 클라이언트가 연결되어있는 지 값 확인.
+	extern "C" EXPORT_CLASS int API_num_users_connected_tcp_server(AsyncKJW* instance_, short id_) // II API 함수: TCP 서버에 몇 개의 클라이언트가 연결되어있는 지 값 확인.
 	{
 		return instance_->num_users_connected_tcp_server(id_);
 	}
 #pragma endregion
 
-		/*void AsyncKJW::save(std::vector<II::network::session_info> info_)
+	/*void AsyncKJW::save(std::vector<II::network::session_info> info_)
+	{
+		if (info_.size() > 0)
 		{
-			if (info_.size() > 0)
-			{
-				m_config_manager.save_to_file(info_);
-				insert(info_);
-			}
-			else
-			{
-				std::cout << "  [II] (100) Size Error! - total : " << info_.size() << std::endl;
-			}
-		}*/
+			m_config_manager.save_to_file(info_);
+			insert(info_);
+		}
+		else
+		{
+			std::cout << "  [II] (100) Size Error! - total : " << info_.size() << std::endl;
+		}
+	}*/
 }

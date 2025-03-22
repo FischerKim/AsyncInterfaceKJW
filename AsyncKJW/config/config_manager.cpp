@@ -19,6 +19,8 @@ namespace II
 	{
 		try
 		{
+
+			// Open the file
 			std::ofstream file(_path);
 			if (!file.is_open())
 			{
@@ -88,6 +90,7 @@ namespace II
 			file << "ParityMode=None\n";
 
 			file.close();
+			std::cout << "INI file created successfully: " << _path << std::endl;
 			return true;
 		}
 		catch (const std::exception& e)
@@ -97,115 +100,215 @@ namespace II
 		}
 	}
 
-	void config_manager::load_ini(std::vector<session_info>& session_infos_, const std::string& path_, const std::string& optional_path_)
+	void config_manager::load_ini(std::vector<session_info>& session_infos_, const std::string& path_)
 	{
-		std::cout << "Loading INI file: " << path_ << std::endl;
-		session_infos_.clear();
+		std::cout << "Loading II.ini file: " << path_ << std::endl;
 
 		// Load the main config file
 		load_from_file(session_infos_, path_, false);
 
-		// Load the optional UDP runtime file, if provided
-		if (!optional_path_.empty())
-		{
-			load_from_file(session_infos_, optional_path_, true);
-		}
+		//std::cout << "Loading udp_runtime.ini file: " << optional_path_ << std::endl;
+		//// Load the optional UDP runtime file, if provided
+		//if (!optional_path_.empty())
+		//{
+		//	load_from_file(session_infos_, optional_path_, true);
+		//}
 	}
 
 	void config_manager::load_from_file(std::vector<session_info>& session_infos_, const std::string& path_, bool override_existing)
 	{
-		std::ifstream file(path_);
-		if (!file.is_open())
+		try
 		{
-			std::cerr << "Error: Unable to open config file: " << path_ << std::endl;
-			return;
-		}
 
-		std::string line, section;
-		session_info temp_session;
-		bool parsing_destination = false;
-		int parent_id = -1;
-
-		while (std::getline(file, line))
-		{
-			line.erase(0, line.find_first_not_of(" \t")); // Trim leading spaces
-			if (line.empty() || line[0] == ';' || line[0] == '#') // Ignore comments and empty lines
-				continue;
-
-			if (line[0] == '[' && line.back() == ']') // New section
+			std::ifstream file(path_);
+			if (!file.is_open())
 			{
-				section = line.substr(1, line.size() - 2);
-				parsing_destination = section.find("UDP_Destination_") == 0;
-				if (!parsing_destination && temp_session._id >= 0)
-				{
-					// Store previous session before creating a new one
-					session_infos_.push_back(temp_session);
-					temp_session = session_info(); // Reset
-				}
-				continue;
+				std::cerr << "Error: Unable to open config file: " << path_ << std::endl;
+				//create_ini();
+				return;
 			}
 
-			std::istringstream iss(line);
-			std::string key, value;
-			if (!std::getline(iss, key, '=') || !std::getline(iss, value))
-				continue;
+			std::string line, section;
+			session_info temp_session;
+			bool parsing_destination = false;
+			int parent_id = -1;
+			int destination_id = -1;
 
-			key.erase(key.find_last_not_of(" \t") + 1); // Trim trailing spaces
-			value.erase(0, value.find_first_not_of(" \t")); // Trim leading spaces
-
-			if (parsing_destination)
+			while (std::getline(file, line))
 			{
-				if (key == "ParentID")
+				line.erase(0, line.find_first_not_of(" \t"));
+				if (line.empty() || line[0] == ';' || line[0] == '#')
 				{
-					parent_id = std::stoi(value);
+					//std::cout << "Ignoring line: " << line << std::endl;
+					continue;
 				}
-				else if (key == "DestinationAddress")
+
+				if (line[0] == '[')
 				{
-					std::string ip = value;
-					if (std::getline(iss, value))
+					std::cout << "Section: " << line << std::endl;
+					if (!section.empty() && !parsing_destination && temp_session._id >= 0)
 					{
-						unsigned int port = std::stoul(value);
+						/*		std::cout << "id " << temp_session._id << std::endl;
+								std::cout << "type " << temp_session._type << std::endl;
+								std::cout << "description " << temp_session._description << std::endl;
+								std::cout << "source ip " << temp_session._source_ip << std::endl;
+								std::cout << "source port " << temp_session._source_port << std::endl;
+								std::cout << "serial port " << temp_session._serial_port << std::endl;*/
+						session_infos_.push_back(temp_session);
+						temp_session = session_info(); // Reset
+					}
 
-						auto it = std::find_if(session_infos_.begin(), session_infos_.end(),
-							[parent_id](const session_info& s) { return s._id == parent_id; });
+					section = line.substr(1, line.size() - 2);
+					parsing_destination = section.find("UDP_Destination_") == 0;
 
-						if (it != session_infos_.end())
+					if (parsing_destination)
+					{
+						parent_id = -1;
+						destination_id = -1;
+					}
+					continue;
+				}
+
+				std::istringstream iss(line);
+
+				std::string key, value;
+				if (!std::getline(iss, key, '=') || !std::getline(iss, value))
+					continue;
+
+				key.erase(key.find_last_not_of(" \t") + 1);
+				value.erase(0, value.find_first_not_of(" \t"));
+
+				std::cout << "key value: " << key << " = " << value << std::endl;
+
+				if (parsing_destination)
+				{
+					if (key.find("ParentID") != std::string::npos)
+					{
+						parent_id = std::stoi(value);
+						std::cout << "ParentID set to: " << parent_id << std::endl;
+					}
+					else if (key.find("DestinationID") != std::string::npos)
+					{
+						destination_id = std::stoi(value);
+						std::cout << "DestinationID set to: " << destination_id << std::endl;
+					}
+					else if (key.find("DestinationAddress") != std::string::npos)
+					{
+						std::string ip = value;
+						std::cout << "Destination Address: " << ip << ",";
+						// read next line for port
+						if (std::getline(file, line))
 						{
-							if (override_existing)
+							std::istringstream next_line_stream(line);
+							if (std::getline(next_line_stream, key, '=') && key.find("DestinationPort") != std::string::npos && std::getline(next_line_stream, value))
 							{
-								it->_destinations[ip] = port; // Override destination
-							}
-							else
-							{
-								it->_destinations.insert({ ip, port }); // Add destination
+								value.erase(0, value.find_first_not_of(" \t")); // Trim leading spaces
+								unsigned int port_no = std::stoul(value);
+								std::cout << "Destination Port: " << port_no << std::endl;
+								for (auto& session : session_infos_) // Use auto& to modify sessions
+								{
+									if (parent_id == session._id)
+									{
+										if (override_existing)
+										{
+											session._udp_destinations[destination_id] = { ip, port_no }; // Override destination
+										}
+										else
+										{
+											session._udp_destinations.insert({ destination_id, { ip, port_no } }); // Add destination
+										}
+										std::cout << "Added destination: " << ip << ":" << port_no << " to session ID: " << parent_id << std::endl;
+									}
+								}
 							}
 						}
 					}
 				}
+				else
+				{
+					if (key.find("ID") != string::npos)
+					{
+						temp_session._id = std::stoi(value);
+					}
+					else if (key.find("Type") != string::npos)
+					{
+						temp_session._type = std::stoi(value);
+					}
+					else if (key.find("Description") != string::npos)
+					{
+						strncpy(temp_session._description, value.c_str(), sizeof(temp_session._description) - 1);
+					}
+					//tcp server
+					else if (key.find("ListeningAddress") != string::npos)
+					{
+						strncpy(temp_session._server_ip, value.c_str(), sizeof(temp_session._server_ip) - 1);
+					}
+					else if (key.find("ListeningPort") != string::npos)
+					{
+						temp_session._server_port = std::stoul(value);
+					}
+					//tcp client
+					else if (key.find("ServerAddress") != string::npos)
+					{
+						strncpy(temp_session._server_ip, value.c_str(), sizeof(temp_session._server_ip) - 1);
+					}
+					else if (key.find("ServerPort") != string::npos)
+					{
+						temp_session._server_port = std::stoul(value);
+					}
+					else if (key.find("ClientAddress") != string::npos)
+					{
+						strncpy(temp_session._client_ip, value.c_str(), sizeof(temp_session._client_ip) - 1);
+					}
+					else if (key.find("ClientPort") != string::npos)
+					{
+						temp_session._client_port = std::stoul(value);
+					}
+					//udp
+					else if (key.find("SourceAddress") != string::npos)
+					{
+						strncpy(temp_session._udp_source_ip, value.c_str(), sizeof(temp_session._udp_source_ip) - 1);
+					}
+					else if (key.find("SourcePort") != string::npos)
+					{
+						temp_session._udp_source_port = std::stoul(value);
+					}
+					//serial
+					else if (key.find("Port") != string::npos)
+					{
+						strncpy(temp_session._serial_port, value.c_str(), sizeof(temp_session._serial_port) - 1);
+					}
+					else if (key.find("BaudRate") != string::npos)
+					{
+						temp_session._baud_rate = std::stoul(value);
+					}
+					else if (key.find("DataWidth") != string::npos)
+					{
+						temp_session._data_width = std::stoul(value);
+					}
+					else if (key.find("StopBits") != string::npos)
+					{
+						strncpy(temp_session._stop_bits, value.c_str(), sizeof(temp_session._stop_bits) - 1);
+					}
+					else if (key.find("ParityMode") != string::npos)
+					{
+						strncpy(temp_session._parity_mode, value.c_str(), sizeof(temp_session._parity_mode) - 1);
+					}
+				}
 			}
-			else
+
+			if (temp_session._id >= 0) // Store last session
 			{
-				if (key == "ID") temp_session._id = std::stoi(value);
-				else if (key == "Type") temp_session._type = std::stoi(value);
-				else if (key == "Description") strncpy(temp_session._description, value.c_str(), sizeof(temp_session._description) - 1);
-				else if (key == "ListeningAddress" || key == "ServerAddress" || key == "SourceAddress")
-					strncpy(temp_session._source_ip, value.c_str(), sizeof(temp_session._source_ip) - 1);
-				else if (key == "ListeningPort" || key == "ServerPort" || key == "SourcePort")
-					temp_session._source_port = std::stoul(value);
-				else if (key == "Port") strncpy(temp_session._serial_port, value.c_str(), sizeof(temp_session._serial_port) - 1);
-				else if (key == "BaudRate") temp_session._baud_rate = std::stoul(value);
-				else if (key == "DataWidth") temp_session._data_width = std::stoul(value);
-				else if (key == "StopBits") strncpy(temp_session._stop_bits, value.c_str(), sizeof(temp_session._stop_bits) - 1);
-				else if (key == "ParityMode") strncpy(temp_session._parity_mode, value.c_str(), sizeof(temp_session._parity_mode) - 1);
+				session_infos_.push_back(temp_session);
 			}
-		}
 
-		if (temp_session._id >= 0) // Store last session
+			file.close();
+
+		}
+		catch (const std::exception& e)
 		{
-			session_infos_.push_back(temp_session);
+			std::cerr << "Exception occurred when loading ini file: " << e.what() << std::endl;
 		}
-
-		file.close();
 	}
 
 	void config_manager::save_ini(const std::vector<II::network::session_info>& session_infos_)
@@ -231,18 +334,20 @@ namespace II
 
 			if (session._type == 2) // TCP Server
 			{
-				file << "ListeningAddress=" << session._source_ip << "\n";
-				file << "ListeningPort=" << session._source_port << "\n";
+				file << "ListeningAddress=" << session._server_ip << "\n";
+				file << "ListeningPort=" << session._server_port << "\n";
 			}
 			else if (session._type == 3) // TCP Client
 			{
-				file << "ServerAddress=" << session._source_ip << "\n";
-				file << "ServerPort=" << session._source_port << "\n";
+				file << "ServerAddress=" << session._server_ip << "\n";
+				file << "ServerPort=" << session._server_port << "\n";
+				file << "ClientAddress=" << session._client_ip << "\n";
+				file << "ClientPort=" << session._client_port << "\n";
 			}
 			else if (session._type == 0) // UDP Client
 			{
-				file << "SourceAddress=" << session._source_ip << "\n";
-				file << "SourcePort=" << session._source_port << "\n";
+				file << "SourceAddress=" << session._udp_source_ip << "\n";
+				file << "SourcePort=" << session._udp_source_port << "\n";
 			}
 			else if (session._type == 4) // Serial Port
 			{
@@ -256,14 +361,14 @@ namespace II
 			file << "\n";
 
 			// Save UDP Destinations
-			if (session._type == 0 && !session._destinations.empty())
+			if (session._type == 0 && !session._udp_destinations.empty())
 			{
-				for (const auto& dest : session._destinations)
+				for (const auto& dest : session._udp_destinations)
 				{
 					file << "[UDP_Destination_" << udp_dest_index++ << "]\n";
 					file << "ParentID=" << session._id << "\n";
-					file << "DestinationAddress=" << dest.first << "\n";
-					file << "DestinationPort=" << dest.second << "\n\n";
+					/*	file << "DestinationAddress=" << dest.first << "\n";
+						file << "DestinationPort=" << dest.second << "\n\n";*/
 				}
 			}
 		}

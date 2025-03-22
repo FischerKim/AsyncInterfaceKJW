@@ -52,7 +52,7 @@ namespace II
 	void session<T>::start()
 	{
 		//_pool.push([this]() {
-			_T->start();
+		_T->start();
 		//	});
 	}
 
@@ -61,7 +61,7 @@ namespace II
 	void session<T>::stop()
 	{
 		//_pool.push([this]() {
-			_T->stop();
+		_T->stop();
 		//	});
 	}
 
@@ -77,7 +77,7 @@ namespace II
 	void session<T>::send(short interface_id_, unsigned char* buffer_, int size_)
 	{
 		//_pool.push([this, interface_id_, buffer_, size_]() {
-			_T->send_message(interface_id_, buffer_, size_);
+		_T->send_message(interface_id_, buffer_, size_);
 		//	});
 	}
 
@@ -92,7 +92,7 @@ namespace II
 	template <typename T>
 	bool session<T>::is_open_serial()
 	{
-		if (std::is_same<T, II::network::modules::serial_handler>::value) 
+		if (std::is_same<T, II::network::modules::serial_handler>::value)
 		{
 			return _T->is_open();
 		}
@@ -102,7 +102,7 @@ namespace II
 	template <typename T>
 	bool session<T>::is_connected_tcp_client()
 	{
-		if (std::is_same<T, II::network::modules::tcp_client_handler>::value) 
+		if (std::is_same<T, II::network::modules::tcp_client_handler>::value)
 		{
 			return _T->is_running();
 		}
@@ -112,7 +112,7 @@ namespace II
 	template <typename T>
 	int session<T>::num_users_connected_tcp_server()
 	{
-		if (std::is_same<T, II::network::modules::tcp_server_handler>::value) 
+		if (std::is_same<T, II::network::modules::tcp_server_handler>::value)
 		{
 			return _T->num_users_connected();
 		}

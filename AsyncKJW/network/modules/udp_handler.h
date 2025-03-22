@@ -31,6 +31,8 @@ namespace II
 				void register_callback(receive_callback callback_) { _receive_callback = callback_; } // 콜백 함수 등록
 			private:
 				void on_read(unsigned char* received_text_, int size_); // 데이터 수신시 불려지는 함수.
+				void print_ip_as_hex(const char* ip);
+				std::string clean_ip(const std::string& ip);
 				void read(); // 수신
 				void write(); // 송신
 				receive_callback _receive_callback;
@@ -48,7 +50,7 @@ namespace II
 				int socket_error_type = SO_ERROR;
 				using _sharedmutex = std::shared_timed_mutex;
 #endif
-				std::deque<std::pair<unsigned char*, int>> _outbound_q; // 데이터 송신용 queue 
+				std::deque<std::pair<int, std::pair<unsigned char*, int>>> _outbound_q; // 데이터 송신용 queue 
 				std::deque<std::pair<unsigned char*, int>> _inbound_q; // 데이터 수신용 queue
 				std::mutex _read_mutex; // 수신용 queue에 대한 mutex
 				std::mutex _write_mutex; // 송신용 queue에 대한 mutex 
@@ -67,7 +69,7 @@ namespace II
 			protected:
 				socket_type _udp_socket;  // UDP 소켓 (non-pointer approach)
 				socket_address_type _source_address; // 주소
-				std::vector< socket_address_type> _destination_address_list;
+				std::map <int, socket_address_type> _destination_address_list;
 				struct ip_mreq _mreq;
 				int _bytes_transferred = -1;
 			public:

@@ -1,5 +1,4 @@
 #pragma once
-#pragma pack(push,1)
 namespace II
 {
 #define RX_STACK_SIZE	50000
@@ -28,25 +27,21 @@ namespace II
 #define SERIAL_MAX_RX_BUFSIZE	30000
 
 #define DATAWID_8				8
-//#define EW_STOPBIT			"one" //one,  onepointfive,  two
-//#define EW_PARITY				"none" //none, odd, even
+    //#define EW_STOPBIT			"one" //one,  onepointfive,  two
+    //#define EW_PARITY				"none" //none, odd, even
 #define SERIAL_RX_BUFFER_SIZE	500
 #define SERIAL_RX_BUFFER_NUMBER	20
 #define SERIAL_TX_BUFFER_SIZE	500
 #define SERIAL_TX_BUFFER_NUMBER	20
 #define EW_BAUDRATE				38400
 
+#define MAX_EVENTS 10
+#define BUFFER_SIZE 9000
 // [INTERFACE_ID : The interface ID is designated as a UNIQUE NUMBER according to the order in which it was created.
 // [IF_TYPE : UDP(0), MULTICAST(1), TCP_SERVER(2), TCP_CLIENT(3), SERIAL(4)]
 
     namespace network
     {
-        namespace modules
-        {
-            #define MAX_EVENTS 10
-            #define BUFFER_SIZE 1024
-            //static const int _reconnect_time_ = 100;
-        }
 
         struct session_info
         {
@@ -56,9 +51,14 @@ namespace II
             char		    _description[20];   // 통신 모듈 설명서
 
             // Ethernet
-            char		    _source_ip[16]; // 송신자 IP
-            unsigned int    _source_port; // 송신자 포트
-            std::map<std::string, unsigned int> _destinations;
+            char		    _server_ip[16]; // 송신자 IP
+            unsigned int    _server_port; // 송신자 포트
+            char		    _client_ip[16]; // 송신자 IP
+            unsigned int    _client_port; // 송신자 포트
+
+            char		    _udp_source_ip[16]; // 송신자 IP
+            unsigned int    _udp_source_port; // 송신자 포트
+            std::map<int, std::pair<std::string, unsigned int>> _udp_destinations;
 
             // Serial
             char		    _serial_port[10]; // 시리얼 포트
@@ -67,10 +67,12 @@ namespace II
             char		    _stop_bits[15]; // stop bits
             char		    _parity_mode[10]; // parity mode
 
-            session_info() : _id(0), _type(0), _source_port(0), _baud_rate(0), _data_width(0)
+            session_info() : _id(-1), _type(0), _server_port(0), _client_port(0), _udp_source_port(0), _baud_rate(0), _data_width(0)
             {
                 std::fill(std::begin(_description), std::end(_description), 0);
-                std::fill(std::begin(_source_ip), std::end(_source_ip), 0);
+                std::fill(std::begin(_server_ip), std::end(_server_ip), 0);
+                std::fill(std::begin(_client_ip), std::end(_client_ip), 0);
+                std::fill(std::begin(_udp_source_ip), std::end(_udp_source_ip), 0);
                 std::fill(std::begin(_serial_port), std::end(_serial_port), 0);
                 std::fill(std::begin(_stop_bits), std::end(_stop_bits), 0);
                 std::fill(std::begin(_parity_mode), std::end(_parity_mode), 0);
@@ -89,14 +91,14 @@ namespace II
             unsigned int        _max_rx_msg_length;
 
             char                _name[16];
-            char                _source_ip[16];
-            unsigned int        _source_port;
-            char                _destination_ip[16];
-            unsigned int        _destination_port;
+            char                _server_ip[16];
+            unsigned int        _server_port;
+            char                _client_ip[16];
+            unsigned int        _client_port;
 
 
             tcp_info() // 생성자
-                : _id(0), 
+                : _id(-1),
                 _rx_stack_size(RX_STACK_SIZE),
                 _tx_stack_size(TX_STACK_SIZE),
                 _rx_priority(RX_TASK_PRIORITY),
@@ -104,12 +106,12 @@ namespace II
                 _max_tx_msg_count(MAX_TX_MSGS),
                 _max_tx_msg_length(MAX_TX_MSGLEN),
                 _max_rx_msg_length(MAX_RX_MSGLEN),
-                _source_port(0),
-                _destination_port(0)
+                _server_port(0),
+                _client_port(0)
             {
                 std::fill(std::begin(_name), std::end(_name), 0);
-                std::fill(std::begin(_source_ip), std::end(_source_ip), 0);
-                std::fill(std::begin(_destination_ip), std::end(_destination_ip), 0);
+                std::fill(std::begin(_server_ip), std::end(_server_ip), 0);
+                std::fill(std::begin(_client_ip), std::end(_client_ip), 0);
             }
         };
 
@@ -129,13 +131,14 @@ namespace II
             char                _source_ip[16];
             unsigned int        _source_port;
 
-            std::map<std::string, unsigned int> _destinations;
-           /* char                _destination_ip[16];
-            unsigned int        _destination_port;*/
+            std::map<int, std::pair<std::string, unsigned int>> _destinations;
+            /* char                _destination_ip[16];
+             unsigned int        _destination_port;*/
             unsigned int        _ttl;
 
             udp_info() // 생성자
-                : _id(0), 
+                : _id(-1),
+                _unicast_or_multicast(0),
                 _rx_stack_size(UDP_RX_STACK_SIZE),
                 _tx_stack_size(UDP_TX_STACK_SIZE),
                 _rx_priority(UDP_RX_TASK_PRIORITY),
@@ -144,12 +147,12 @@ namespace II
                 _max_tx_msg_length(UDP_MAX_TX_MSGLEN),
                 _max_rx_msg_length(UDP_MAX_RX_MSGLEN),
                 _source_port(0),
-               // _destination_port(0),
+                // _destination_port(0),
                 _ttl(1)
             {
                 std::fill(std::begin(_name), std::end(_name), 0);
                 std::fill(std::begin(_source_ip), std::end(_source_ip), 0);
-               // std::fill(std::begin(_destination_ip), std::end(_destination_ip), 0);
+                // std::fill(std::begin(_destination_ip), std::end(_destination_ip), 0);
             }
         };
 
@@ -172,7 +175,8 @@ namespace II
             char                _parity_mode[10];
 
             serial_info() // 생성자
-                : _id(0), 
+                : _id(-1),
+                _baud_rate(0),
                 _rx_stack_size(SERIAL_RX_STACK_SIZE),
                 _tx_stack_size(SERIAL_TX_STACK_SIZE),
                 _rx_priority(SERIAL_RX_TASK_PRIORITY),
@@ -182,6 +186,7 @@ namespace II
                 _max_rx_msg_length(SERIAL_MAX_RX_MSGLEN),
                 _data_width(DATAWID_8)
             {
+                std::fill(std::begin(_name), std::end(_name), 0);
                 std::fill(std::begin(_stop_bits), std::end(_stop_bits), 0);
                 std::fill(std::begin(_parity_mode), std::end(_parity_mode), 0);
                 //strcpy(_stop_bits, "one");
@@ -190,5 +195,3 @@ namespace II
         };
     }
 }
-
-#pragma pack(pop)

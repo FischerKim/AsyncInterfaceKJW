@@ -48,12 +48,11 @@ namespace II
 				try
 				{
 					_tcp_info._id = info_._id;
-					strcpy(_tcp_info._source_ip, info_._source_ip);
-					_tcp_info._source_port = info_._source_port;
+					strcpy(_tcp_info._client_ip, info_._client_ip);
+					_tcp_info._client_port = info_._client_port;
 
-
-					std::strncpy(_tcp_info._destination_ip, info_._destinations.begin()->first.c_str(), sizeof(_tcp_info._destination_ip) - 1);
-					_tcp_info._destination_port = info_._destinations.begin()->second;
+					std::strncpy(_tcp_info._server_ip, info_._server_ip, sizeof(_tcp_info._server_ip) - 1);
+					_tcp_info._server_port = info_._server_port;
 					//strcpy(_tcp_info._destination_ip, info_._destination_ip);
 					//_tcp_info._destination_port = info_._destination_port;
 				}
@@ -95,11 +94,11 @@ namespace II
 			{
 				_is_running = true;
 				std::printf("     L [IFC]  TCP CLIENT : %s\n", _tcp_info._name);
-				std::printf("     L [IFC]    + CLIENT IP : %s\n", _tcp_info._source_ip);
-				std::printf("     L [IFC]    + CLIENT PORT : %d\n", _tcp_info._source_port);
+				std::printf("     L [IFC]    + CLIENT IP : %s\n", _tcp_info._client_ip);
+				std::printf("     L [IFC]    + CLIENT PORT : %d\n", _tcp_info._client_port);
 				std::printf("     L CONNECTING TO...\n");
-				std::printf("     L [IFC]    + SERVER IP : %s\n", _tcp_info._destination_ip);
-				std::printf("     L [IFC]    + SERVER PORT : %d\n", _tcp_info._destination_port);
+				std::printf("     L [IFC]    + SERVER IP : %s\n", _tcp_info._server_ip);
+				std::printf("     L [IFC]    + SERVER PORT : %d\n", _tcp_info._server_port);
 #ifndef LINUX
 				_iocp = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0);
 				//	CreateIoCompletionPort((HANDLE)_client_socket, _iocp, (ULONG_PTR)_client_socket, 0); //4 넣어도 됨
@@ -386,12 +385,12 @@ namespace II
 				{
 					std::shared_lock<_sharedmutex> lock(_contexts_mutex);
 					int i = 0;
-					for (; i < strlen((char*)_tcp_info._destination_ip); i++)
+					for (; i < strlen((char*)_tcp_info._server_ip); i++)
 					{
-						if (_tcp_info._destination_ip[i] == ' ')
+						if (_tcp_info._server_ip[i] == ' ')
 							break;
 					}
-					_tcp_info._destination_ip[i] = '\0';
+					_tcp_info._server_ip[i] = '\0';
 #ifndef LINUX
 					WSADATA wsaData;
 					if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0)
@@ -404,7 +403,7 @@ namespace II
 					socket_address_type client_address;
 					client_address.sin_family = AF_INET;
 					client_address.sin_addr.s_addr = INADDR_ANY;
-					client_address.sin_port = htons(_tcp_info._source_port);
+					client_address.sin_port = htons(_tcp_info._client_port);
 					if (bind(_client_socket, (socket_address_type2*)&client_address, sizeof(client_address)) == socket_error_type)
 					{
 						std::cerr << "[TCP Client] Error when binding a socket to a specified address" << std::endl;
@@ -436,11 +435,11 @@ namespace II
 					socket_address_type client_address;
 					client_address.sin_family = AF_INET;
 					client_address.sin_addr.s_addr = INADDR_ANY;
-					client_address.sin_port = htons(_tcp_info._source_port);
+					client_address.sin_port = htons(_tcp_info._client_port);
 
 					if (bind(_client_socket, (socket_address_type2*)&client_address, sizeof(client_address)) == -1)
 					{
-						std::cerr << "[TCP Client] Error when binding a socket to a specified address port:" << _tcp_info._source_port << std::endl;
+						std::cerr << "[TCP Client] Error when binding a socket to a specified address port:" << _tcp_info._client_port << std::endl;
 						close(_client_socket);
 						_client_socket = -1;
 						sleep(1);
@@ -456,14 +455,14 @@ namespace II
 
 					socket_address_type server_address;
 					server_address.sin_family = AF_INET;
-					server_address.sin_port = htons(_tcp_info._destination_port);
-					inet_pton(AF_INET, _tcp_info._destination_ip, &server_address.sin_addr);
+					server_address.sin_port = htons(_tcp_info._server_port);
+					inet_pton(AF_INET, _tcp_info._server_ip, &server_address.sin_addr);
 					int result = connect(_client_socket, (socket_address_type2*)&server_address, sizeof(server_address));
 
 					if (result == -1)
 					{
 						std::cerr << "[TCP Client]: Error when connecting to the server" << std::endl;
-						std::cout << "[TCP Client]: Trying again to connect to the server " << _tcp_info._destination_ip << ":" << _tcp_info._destination_port << std::endl;
+						std::cout << "[TCP Client]: Trying again to connect to the server " << _tcp_info._server_ip << ":" << _tcp_info._server_port << std::endl;
 #ifndef LINUX
 						shutdown(_client_socket, SD_BOTH);  // SD_BOTH is generally more clear than '2'
 						closesocket(_client_socket);        // Ensure socket handle is freed
@@ -494,7 +493,7 @@ namespace II
 #endif
 						if (getpeername(_client_socket, (socket_address_type2*)&actual_address, &addrlen) == 0)
 						{
-							if (ntohs(actual_address.sin_port) != _tcp_info._destination_port)
+							if (ntohs(actual_address.sin_port) != _tcp_info._server_port)
 							{
 								std::cerr << "Error: Connected to a different port!" << std::endl;
 #ifndef LINUX

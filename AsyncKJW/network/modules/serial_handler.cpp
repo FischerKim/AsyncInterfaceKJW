@@ -359,8 +359,8 @@ namespace II
 						std::cerr << "[UDP] Error: " << e.what() << std::endl;
 					}
 					std::this_thread::sleep_for(std::chrono::milliseconds(1));
-					}
 				}
+			}
 
 			void serial_handler::write_serial() // ¼Û½Å
 			{
@@ -433,19 +433,19 @@ namespace II
 							}
 #endif
 						}
-						}
+					}
 					catch (const std::exception& e)
 					{
 						std::cerr << "[Serial] Error: " << e.what() << std::endl;
 					}
 					std::this_thread::sleep_for(std::chrono::milliseconds(10));
-					}
 				}
+			}
 
 			bool serial_handler::is_running()
 			{
 				return _is_running;
 			}
-			}
-			}
 		}
+	}
+}

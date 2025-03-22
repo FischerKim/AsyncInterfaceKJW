@@ -71,8 +71,8 @@ namespace II
 				try
 				{
 					_tcp_info._id = info_._id;
-					strcpy(_tcp_info._source_ip, info_._source_ip);
-					_tcp_info._source_port = info_._source_port;
+					strcpy(_tcp_info._server_ip, info_._server_ip);
+					_tcp_info._server_port = info_._server_port;
 
 					//strcpy(_tcp_info._destination_ip, info_._destination_ip);
 					//_tcp_info._destination_port = info_._destination_port;
@@ -116,15 +116,15 @@ namespace II
 			{
 				if (_is_running) return false;
 				std::printf("     L [IFC]  TCP SERVER : %s\n", _tcp_info._name);
-				std::printf("     L [IFC]    + SERVER IP : %s\n", _tcp_info._source_ip);
-				std::printf("     L [IFC]    + SERVER PORT : %d\n", _tcp_info._source_port);
+				std::printf("     L [IFC]    + SERVER IP : %s\n", _tcp_info._server_ip);
+				std::printf("     L [IFC]    + SERVER PORT : %d\n", _tcp_info._server_port);
 
 				int i = 0;
-				for (; i < strlen((char*)_tcp_info._source_ip); i++)
+				for (; i < strlen((char*)_tcp_info._server_ip); i++)
 				{
-					if (_tcp_info._source_ip[i] == ' ') break;
+					if (_tcp_info._server_ip[i] == ' ') break;
 				}
-				_tcp_info._source_ip[i] = '\0';
+				_tcp_info._server_ip[i] = '\0';
 #ifndef LINUX
 				WSADATA wsaData;
 				if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0)
@@ -159,8 +159,8 @@ namespace II
 
 				socket_address_type server_address;
 				server_address.sin_family = AF_INET;
-				server_address.sin_port = htons(_tcp_info._source_port);
-				inet_pton(AF_INET, _tcp_info._source_ip, &server_address.sin_addr);
+				server_address.sin_port = htons(_tcp_info._server_port);
+				inet_pton(AF_INET, _tcp_info._server_ip, &server_address.sin_addr);
 				if (bind(_server_socket, (socket_address_type2*)&server_address, sizeof(server_address)) == -1)
 				{
 					std::cerr << "[TCP Server] Error when binding a socket" << std::endl;
@@ -183,8 +183,8 @@ namespace II
 					return false;
 				}
 
-				std::cout << "TCP server started. Listening for incoming connections on " << _tcp_info._source_ip << ":"
-					<< std::to_string(_tcp_info._source_port) << std::endl;
+				std::cout << "TCP server started. Listening for incoming connections on " << _tcp_info._server_ip << ":"
+					<< std::to_string(_tcp_info._server_port) << std::endl;
 
 #ifndef LINUX
 				_iocp = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0);
@@ -393,7 +393,7 @@ namespace II
 							return false;
 						}
 
-						
+
 						/*
 						EPOLLIN : 수신할 데이터가 있다. 
 						EPOLLOUT : 송신 가능하다. 
@@ -437,16 +437,16 @@ namespace II
 							std::unique_lock<std::mutex> lock(_read_mutex);
 
 							auto& front = _inbound_q.front();
-						/*	unsigned char* buffer = front.first;
-							int size = front.second;
-							_inbound_q.pop_front();*/
+							/*	unsigned char* buffer = front.first;
+								int size = front.second;
+								_inbound_q.pop_front();*/
 
-							//std::string alphanumeric_text;
-							//for (int i = 0; i < size; ++i)
-							//{
-							//	if (std::isalnum(buffer[i])) alphanumeric_text += buffer[i];
-							//}
-							//if (_print_to_console) std::cout << "[TCP Server] Received: " << alphanumeric_text << " Size: " << size << std::endl;
+								//std::string alphanumeric_text;
+								//for (int i = 0; i < size; ++i)
+								//{
+								//	if (std::isalnum(buffer[i])) alphanumeric_text += buffer[i];
+								//}
+								//if (_print_to_console) std::cout << "[TCP Server] Received: " << alphanumeric_text << " Size: " << size << std::endl;
 
 							std::cout << "[TCP Server] Received Data Size: " << front.second << std::endl;
 #ifndef LINUX
@@ -510,7 +510,7 @@ namespace II
 #ifndef LINUX
 					for (auto& client : _client_socket)
 					{
-					    shutdown(client.second._socket, SD_BOTH);
+						shutdown(client.second._socket, SD_BOTH);
 						closesocket(client.second._socket);
 					}
 #else
@@ -542,7 +542,7 @@ namespace II
 					for (auto& t : workers)
 					{
 						if (t.joinable()) {
-							t.join(); 
+							t.join();
 						}
 					}
 					std::cout << "[TCP Server]: Stopped " << std::endl;

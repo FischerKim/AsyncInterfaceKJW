@@ -35,6 +35,7 @@
 #include <queue>
 #include <system_error>
 #include <chrono>
+#include <algorithm> 
 #include <future>
 #include <cctype>  // for tolower
 #include <atomic>
